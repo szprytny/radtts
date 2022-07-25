@@ -436,6 +436,12 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
             if rank == 0:
                 print(''.join(print_list), flush=True)
 
+            if iteration % iters_per_checkpoint != 0 and iteration % 200 == 0:
+                checkpoint_path = "{}/latest_model.pt".format(
+                    output_directory)
+                save_checkpoint(model, optimizer, learning_rate, iteration,
+                                checkpoint_path)
+
             if iteration > -1 and iteration % iters_per_checkpoint == 0:
                 if rank == 0:
                     val_loss_outputs = compute_validation_loss(

@@ -144,7 +144,7 @@ def infer(radtts_path, radtts_config_path, vocoder_path,
             f0, voiced_mask, p_voiced, energy_avg,
             audiopaths) = parse_data_from_batch(batch)
         filename = os.path.splitext(
-            os.path.basename(batch['audiopaths'][0]))[0]
+            os.path.basename(audiopaths[0]))[0]
         f0_gt, energy_avg_gt = f0.clone(), energy_avg.clone()
 
         suffix_path = "sid{}_sigma{}".format(speaker_ids.item(), sigma)
@@ -241,7 +241,7 @@ if __name__ == "__main__":
     parser.add_argument('-v', '--vocoder_path', type=str)
     parser.add_argument('-k', '--vocoder_config_path', type=str, help='vocoder JSON file config')
     parser.add_argument('-p', '--params', nargs='+', default=[])
-    parser.add_argument('-n', '--n_samples', default=5, type=int)
+    parser.add_argument('-n', '--n_samples', default=6, type=int)
     parser.add_argument("-s", "--sigma", default=0.8, type=float)
     parser.add_argument("--sigma_f0", default=1.0, type=float)
     parser.add_argument("--sigma_energy", default=1.0, type=float)
@@ -251,7 +251,7 @@ if __name__ == "__main__":
     parser.add_argument("--energy_std", default=0.0, type=float)
     parser.add_argument("--seed", default=1234, type=int)
     parser.add_argument("--use_amp", action="store_true")
-    parser.add_argument("-o", '--output_dir', type=str)
+    parser.add_argument("-o", '--output_dir', default='results/', type=str)
     parser.add_argument("-d", "--denoising_strength", default=0.01, type=float)
     parser.add_argument("--shuffle", action="store_true")
     parser.add_argument("--save_mels", action="store_true")
@@ -279,3 +279,4 @@ if __name__ == "__main__":
               args.sigma_f0, args.sigma_energy, args.save_features,
               args.plot_features, args.f0_mean, args.f0_std, args.energy_mean,
               args.energy_std, args.filter_invalid)
+

@@ -1,0 +1,7 @@
+__pycache__
+data_cache
+filelists/
+*.pdf
+*.pt
+results
+sentences/

@@ -52,6 +52,10 @@ def get_symbols(symbol_set):
         _letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
         _arpabet = ["@" + s for s in arpabet]
         symbols = list(_punctuation + _math + _special + _accented + _numbers + _letters) + _arpabet
+    elif symbol_set == 'shmart':
+        _punctuation = ":;-,.?!… "
+        _letters = 'AaĄąBbCcĆćDdEeĘęFfGgHhIiJjKkLlŁłMmNnŃńOoÓóPpQqRrSsŚśTtUuVvWwXxYyZzŹźŻż'
+        symbols = list('_' + _punctuation + _letters )
     else:
         raise Exception("{} symbol set does not exist".format(symbol_set))
 

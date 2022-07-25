@@ -74,6 +74,12 @@ def dehyphenize_compound_words(text):
 def remove_space_before_punctuation(text):
     return re.sub(r"\s([{}](?:\s|$))".format(punctuation), r'\1', text)
 
+def shmart_replace(text: str):
+  return text \
+    .replace('zż', 'z-ż') \
+    .replace('odziem', 'od-ziem') \
+    .replace('arzn', 'ar-zn') \
+    .replace('...', '…')
 
 class Cleaner(object):
     def __init__(self, cleaner_names, phonemedict):
@@ -109,6 +115,9 @@ class Cleaner(object):
             word_fns = [expand_numbers, expand_abbreviations]
         elif cleaner_name == 'transliteration_cleaners':
             sequence_fns = [convert_to_ascii, lowercase, collapse_whitespace]
+        elif cleaner_name == 'shmart_cleaners':
+            sequence_fns = [lowercase, shmart_replace]
+            word_fns = []
         else:
             raise Exception("{} cleaner not supported".format(cleaner_name))
 
