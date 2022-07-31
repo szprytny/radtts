@@ -102,68 +102,69 @@ def infer(radtts_path, vocoder_path, vocoder_config_path, text_path, speaker,
         data_config['training_files'],
         **dict((k, v) for k, v in data_config.items() if k not in ignore_keys))
 
-    speaker_id = trainset.get_speaker_id(speaker).cuda()
-    speaker_id_text, speaker_id_attributes = speaker_id, speaker_id
-    if speaker_text is not None:
-        speaker_id_text = trainset.get_speaker_id(speaker_text).cuda()
-    if speaker_attributes is not None:
-        speaker_id_attributes = trainset.get_speaker_id(
-            speaker_attributes).cuda()
+    for i, speaker in enumerate(trainset.speaker_ids):
+        speaker_id = trainset.get_speaker_id(speaker).cuda()
+        speaker_id_text, speaker_id_attributes = speaker_id, speaker_id
+        if speaker_text is not None:
+            speaker_id_text = trainset.get_speaker_id(speaker_text).cuda()
+        if speaker_attributes is not None:
+            speaker_id_attributes = trainset.get_speaker_id(
+                speaker_attributes).cuda()
 
-    text_list = lines_to_list(text_path)
-    text_list = ['Litwo, Ojczyzno moja! ty jesteś jak zdrowie; Ile cię trzeba cenić, ten tylko się dowie, Kto cię stracił. Dziś piękność twą w całej ozdobie Widzę i opisuję, bo tęsknię po tobie.']
+        text_list = lines_to_list(text_path)
+        text_list = ['Litwo, Ojczyzno moja! ty jesteś jak zdrowie; Ile cię trzeba cenić, ten tylko się dowie, Kto cię stracił. Dziś piękność twą w całej ozdobie Widzę i opisuję, bo tęsknię po tobie.']
 
-    os.makedirs(output_dir, exist_ok=True)
-    for i, text in enumerate(text_list):
-        if text.startswith("#"):
-            continue
-        #print("{}/{}: {}".format(i, len(text_list), text))
-        text = trainset.get_text(text).cuda()[None]
-        for take in range(n_takes):
-            # random.seed()
-            # f0_mean = 0.1
-            # f0_std = 0.03
-            # sigma = random.randrange(0, 100, 3) / 100
-            # sigma_tkndur = .7
-            # token_dur_scaling = 2
-            # sigma_f0 = .33 * take
-            # sigma_energy = 0.33 * take
-            with amp.autocast(use_amp):
-                with torch.no_grad():
-                    outputs = radtts.infer(
-                        speaker_id, text, sigma, sigma_tkndur, sigma_f0,
-                        sigma_energy, token_dur_scaling, token_duration_max=100,
-                        speaker_id_text=speaker_id_text,
-                        speaker_id_attributes=speaker_id_attributes,
-                        f0_mean=f0_mean, f0_std=f0_std, energy_mean=energy_mean,
-                        energy_std=energy_std)
+        os.makedirs(output_dir, exist_ok=True)
+        for i, text in enumerate(text_list):
+            if text.startswith("#"):
+                continue
+            #print("{}/{}: {}".format(i, len(text_list), text))
+            text = trainset.get_text(text).cuda()[None]
+            for take in range(n_takes):
+                # random.seed()
+                # f0_mean = 0.1
+                # f0_std = 0.03
+                # sigma = random.randrange(0, 100, 3) / 100
+                # sigma_tkndur = .7
+                # token_dur_scaling = 2
+                # sigma_f0 = .33 * take
+                # sigma_energy = 0.33 * take
+                with amp.autocast(use_amp):
+                    with torch.no_grad():
+                        outputs = radtts.infer(
+                            speaker_id, text, sigma, sigma_tkndur, sigma_f0,
+                            sigma_energy, token_dur_scaling, token_duration_max=100,
+                            speaker_id_text=speaker_id_text,
+                            speaker_id_attributes=speaker_id_attributes,
+                            f0_mean=f0_mean, f0_std=f0_std, energy_mean=energy_mean,
+                            energy_std=energy_std)
 
-                    mel = outputs['mel']
-                    audio = vocoder(mel).float()[0]
-                    audio_denoised = denoiser(
-                        audio, strength=denoising_strength)[0].float()
+                        mel = outputs['mel']
+                        audio = vocoder(mel).float()[0]
+                        audio_denoised = denoiser(
+                            audio, strength=denoising_strength)[0].float()
 
-                    audio = audio[0].cpu().numpy()
-                    audio_denoised = audio_denoised[0].cpu().numpy()
-                    audio_denoised = audio_denoised / np.max(np.abs(audio_denoised))
+                        audio = audio[0].cpu().numpy()
+                        audio_denoised = audio_denoised[0].cpu().numpy()
+                        audio_denoised = audio_denoised / np.max(np.abs(audio_denoised))
 
-                    suffix_path = "{}_{}_{}_durscaling{}_sigma{}_sigmatext{}_sigmaf0{}_sigmaenergy{}".format(
-                    speaker, i, take, token_dur_scaling, sigma, sigma_tkndur, sigma_f0,
-                    sigma_energy)
+                        suffix_path = "{}_{}_{}_durscaling{}_sigma{}_sigmatext{}_sigmaf0{}_sigmaenergy{}".format(
+                        speaker, i, take, token_dur_scaling, sigma, sigma_tkndur, sigma_f0,
+                        sigma_energy)
 
-                    write("{}/{}_denoised_{}.wav".format(
-                        output_dir, suffix_path, denoising_strength),
-                        data_config['sampling_rate'], audio_denoised)
+                        write("{}/{}_denoised_{}.wav".format(
+                            output_dir, suffix_path, denoising_strength),
+                            data_config['sampling_rate'], audio_denoised)
 
-            if plot:
-                fig, axes = plt.subplots(2, 1, figsize=(10, 6))
-                axes[0].plot(outputs['f0'].cpu().numpy()[0], label='f0')
-                axes[1].plot(outputs['energy_avg'].cpu().numpy()[0], label='energy_avg')
-                for ax in axes:
-                    ax.legend(loc='best')
-                plt.tight_layout()
-                fig.savefig("{}/{}_features.png".format(output_dir, suffix_path))
-                plt.close('all')
+                if plot:
+                    fig, axes = plt.subplots(2, 1, figsize=(10, 6))
+                    axes[0].plot(outputs['f0'].cpu().numpy()[0], label='f0')
+                    axes[1].plot(outputs['energy_avg'].cpu().numpy()[0], label='energy_avg')
+                    for ax in axes:
+                        ax.legend(loc='best')
+                    plt.tight_layout()
+                    fig.savefig("{}/{}_features.png".format(output_dir, suffix_path))
+                    plt.close('all')
 
 
 if __name__ == "__main__":

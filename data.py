@@ -326,7 +326,7 @@ class Data(torch.utils.data.Dataset):
         p_voiced = None
         voiced_mask = None
         if self.use_f0:
-            filename = '_'.join(audiopath.split('/')[-2:])
+            filename = '_'.join(audiopath.split('/')[-3:])
             f0_path = os.path.join(self.betabinom_cache_path, filename)
             f0_path += "_f0_sr{}_fl{}_hl{}_f0min{}_f0max{}_log{}.pt".format(
                 self.sampling_rate, self.filter_length, self.hop_length,

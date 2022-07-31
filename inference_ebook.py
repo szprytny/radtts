@@ -102,14 +102,6 @@ def infer(radtts_path, vocoder_path, vocoder_config_path, text_path, speaker,
         data_config['training_files'],
         **dict((k, v) for k, v in data_config.items() if k not in ignore_keys))
 
-    speaker_id = trainset.get_speaker_id(f'{speaker}').cuda()
-    speaker_id_text, speaker_id_attributes = speaker_id, speaker_id
-    if speaker_text is not None:
-        speaker_id_text = trainset.get_speaker_id(speaker_text).cuda()
-    if speaker_attributes is not None:
-        speaker_id_attributes = trainset.get_speaker_id(
-            speaker_attributes).cuda()
-
     text_list = lines_to_list(text_path)
     n_takes = 1
 
@@ -117,17 +109,16 @@ def infer(radtts_path, vocoder_path, vocoder_config_path, text_path, speaker,
     for i, text in enumerate(text_list):
         speaker, text = text.split('|')
         speaker_id = trainset.get_speaker_id(speaker).cuda()
+        speaker_id_text, speaker_id_attributes = speaker_id, speaker_id
         
         #print(f"{i+1}/{len(text_list)}: {text}")
         text = trainset.get_text(text).cuda()[None]
         for take in range(n_takes):
-            sigma = .533 + .366 * random.random()
-            token_dur_scaling = .90 + random.random() * 0.2
             with amp.autocast(use_amp):
                 with torch.no_grad():
                     outputs = radtts.infer(
                         speaker_id, text, sigma, sigma_tkndur, sigma_f0,
-                        sigma_energy, token_dur_scaling, token_duration_max=100,
+                        sigma_energy, token_dur_scaling, token_duration_max=125,
                         speaker_id_text=speaker_id_text,
                         speaker_id_attributes=speaker_id_attributes,
                         f0_mean=f0_mean, f0_std=f0_std, energy_mean=energy_mean,
