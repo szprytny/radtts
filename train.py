@@ -148,7 +148,7 @@ def prepare_dataloaders(data_config, n_gpus, batch_size):
     if n_gpus > 1:
         train_sampler, shuffle = DistributedSampler(trainset), False
 
-    train_loader = DataLoader(trainset, num_workers=8, shuffle=shuffle,
+    train_loader = DataLoader(trainset, num_workers=4, shuffle=shuffle,
                               sampler=train_sampler, batch_size=batch_size,
                               pin_memory=False, drop_last=True,
                               collate_fn=collate_fn)
@@ -203,7 +203,7 @@ def compute_validation_loss(iteration, model, criterion, valset, collate_fn,
     model.eval()
     with torch.no_grad():
         val_sampler = DistributedSampler(valset) if n_gpus > 1 else None
-        val_loader = DataLoader(valset, sampler=val_sampler, num_workers=8,
+        val_loader = DataLoader(valset, sampler=val_sampler, num_workers=4,
                                 shuffle=False, batch_size=batch_size,
                                 pin_memory=False, collate_fn=collate_fn)
 

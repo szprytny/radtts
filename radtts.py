@@ -261,7 +261,7 @@ class RADTTS(torch.nn.Module):
 
     def preprocess_context(self, context, speaker_vecs, out_lens=None, f0=None,
                            energy_avg=None):
-
+                           
         if self.n_group_size > 1:
             # unfolding zero-padded values
             context = self.unfold(context.unsqueeze(-1))
@@ -611,7 +611,7 @@ class RADTTS(torch.nn.Module):
                     voiced_mask, out_lens)[:, 0]
 
             if f0_mean > 0.0:
-                vmask_bool = voiced_mask.bool()
+                vmask_bool = voiced_mask.bool()[:, :f0.shape[1]]
                 f0_mu, f0_sigma = f0[vmask_bool].mean(), f0[vmask_bool].std()
                 f0[vmask_bool] = (f0[vmask_bool] - f0_mu) / f0_sigma
                 f0_std = f0_std if f0_std > 0 else f0_sigma
@@ -639,7 +639,7 @@ class RADTTS(torch.nn.Module):
             if self.decoder_use_unvoiced_bias:
                 context_w_spkvec = self.preprocess_context(
                     txt_enc_time_expanded, spk_vec, out_lens,
-                    f0 * voiced_mask + f0_bias, energy_avg)
+                    f0[:, :voiced_mask.shape[0]] * voiced_mask + f0_bias, energy_avg)
             else:
                 context_w_spkvec = self.preprocess_context(
                     txt_enc_time_expanded, spk_vec, out_lens, f0*voiced_mask,

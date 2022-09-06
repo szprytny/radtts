@@ -3,11 +3,11 @@
         "output_directory": "/debug",
         "epochs": 10000000,
         "optim_algo": "RAdam",
-        "learning_rate": 1e-4,
+        "learning_rate": 5e-4,
         "weight_decay": 1e-6,
         "sigma": 1.0,
         "iters_per_checkpoint": 2500,
-        "batch_size": 4,
+        "batch_size": 16,
         "seed": null,
         "checkpoint_path": "/debug/latest_model.pt",
         "ignore_layers": [],
@@ -16,13 +16,13 @@
         "include_layers": [],
         "vocoder_config_path": "c:/shmart/hifigan/cp_hifigan/config.json",
         "vocoder_checkpoint_path": "c:/shmart/hifigan/cp_hifigan/g_00900000",
-        "log_attribute_samples": false,
+        "log_attribute_samples": true,
         "log_decoder_samples": true,
         "warmstart_checkpoint_path": "",
         "use_amp": false,
         "grad_clip_val": 1.0,
         "loss_weights": {
-            "blank_logprob": -1,
+            "blank_logprob": -1, 
             "ctc_loss_weight": 0.1,
             "binarization_loss_weight": 1.0,
             "dur_loss_weight": 1.0,
@@ -30,12 +30,11 @@
             "energy_loss_weight": 1.0,
             "vpred_loss_weight": 1.0
         },
-        "binarization_start_iter": 10000,
-        "kl_loss_start_iter": 30000,
-        "unfreeze_modules": "all"
+        "binarization_start_iter": 0,
+        "kl_loss_start_iter": 0,
+        "unfreeze_modules": "durf0energyvpred"
     },
     "data_config": {
-        "combine_speaker_and_emotion": false,
         "training_files": {
             "LJS": {
                 "basedir": "C:/model/RAD/",
@@ -106,7 +105,7 @@
         "n_early_every": 2,
         "n_group_size": 2,
         "affine_model": "wavenet",
-        "include_modules": "decatnvpred",
+        "include_modules": "decatndpmvpredapm",
         "scaling_fn": "tanh",
         "matrix_decomposition": "LUS",
         "learn_alignments": true,
@@ -125,9 +124,78 @@
         "ap_pred_log_f0": true,
         "ap_use_unvoiced_bias": true,
         "ap_use_voiced_embeddings": true,
-        "dur_model_config": null,
-        "f0_model_config": null,
-        "energy_model_config": null,
+        "dur_model_config": {
+            "name": "dap",
+            "hparams": {
+                "n_speaker_dim": 16,
+                "bottleneck_hparams": {
+                    "in_dim": 512,
+                    "reduction_factor": 16,
+                    "norm": "weightnorm",
+                    "non_linearity": "relu"
+                },
+                "take_log_of_input": true,
+                "arch_hparams": {
+                    "out_dim": 1,
+                    "n_layers": 2,
+                    "n_channels": 256,
+                    "kernel_size": 3,
+                    "p_dropout": 0.25
+                }
+            }
+        },
+        "f0_model_config": {
+            "name": "agap",
+            "hparams": {
+                "n_in_dim": 1,
+                "n_group_size": 1,
+                "take_log_of_input": false,
+                "n_speaker_dim": 22,
+                "n_flows": 2,
+                "n_hidden": 128,
+                "n_lstm_layers": 1,
+                "scaling_fn": "tanh",
+                "bottleneck_hparams": {
+                    "in_dim": 512,
+                    "reduction_factor": 16,
+                    "norm": "weightnorm",
+                    "non_linearity": "relu"
+                },
+                "spline_flow_params": {
+                    "n_in_channels": 1,
+                    "n_context_dim": 128,
+                    "n_layers": 4,
+                    "n_bins": 24,
+                    "use_quadratic": true
+                }
+            }
+        },
+        "energy_model_config": {
+            "name": "agap",
+            "hparams": {
+                "n_in_dim": 1,
+                "n_group_size": 1,
+                "take_log_of_input": false,
+                "n_speaker_dim": 22,
+                "n_flows": 2,
+                "n_hidden": 128,
+                "n_lstm_layers": 1,
+                "scaling_fn": "tanh",
+                "bottleneck_hparams": {
+                    "in_dim": 512,
+                    "reduction_factor": 16,
+                    "norm": "weightnorm",
+                    "non_linearity": "relu"
+                },
+                "spline_flow_params": {
+                    "n_in_channels": 1,
+                    "n_context_dim": 128,
+                    "n_layers": 4,
+                    "n_bins": 24,
+                    "use_quadratic": true
+                }
+            }
+        },
         "v_model_config": {
             "name": "dap",
             "hparams": {

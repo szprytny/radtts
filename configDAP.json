@@ -15,7 +15,7 @@
         "finetune_layers": [],
         "include_layers": [],
         "vocoder_config_path": "c:/shmart/hifigan/cp_hifigan/config.json",
-        "vocoder_checkpoint_path": "c:/shmart/hifigan/cp_hifigan/shmarter",
+        "vocoder_checkpoint_path": "c:/shmart/hifigan/cp_hifigan/g_00900000",
         "log_attribute_samples": true,
         "log_decoder_samples": true,
         "warmstart_checkpoint_path": "C:/outdir/models/25072022/model_80000",
@@ -35,18 +35,19 @@
         "unfreeze_modules": "durf0energyvpred"
     },
     "data_config": {
+        "combine_speaker_and_emotion": false,
         "training_files": {
             "LJS": {
-                "basedir": "C:/model/RAD",
-                "audiodir": "",
+                "basedir": "C:/model/RAD/",
+                "audiodir": "C:/model/RAD/",
                 "filelist": "train.txt",
                 "lmdbpath": ""
             }
         },
         "validation_files": {
             "LJS": {
-                "basedir": "C:/model/RAD",
-                "audiodir": "",
+                "basedir": "C:/model/RAD/",
+                "audiodir": "C:/model/RAD/",
                 "filelist": "test.txt",
                 "lmdbpath": ""
             }
@@ -76,7 +77,7 @@
         "handle_phoneme_ambiguous": "ignore",
         "include_speakers": null,
         "n_frames": -1,
-        "betabinom_cache_path": "data_cache/",
+        "betabinom_cache_path": "/debug/data_cache",
         "lmdb_cache_path": "",
         "use_attn_prior_masking": true,
         "prepend_space_to_text": true,
@@ -91,7 +92,7 @@
         "dist_url": "tcp://localhost:54321"
     },
     "model_config": {
-        "n_speakers": 30,
+        "n_speakers": 52,
         "n_speaker_dim": 16,
         "n_text": 120,
         "n_text_dim": 512,
