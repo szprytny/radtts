@@ -56,6 +56,10 @@ def get_symbols(symbol_set):
         _punctuation = ":;-,.?!… "
         _letters = 'AaĄąBbCcĆćDdEeĘęFfGgHhIiJjKkLlŁłMmNnŃńOoÓóPpQqRrSsŚśTtUuVvWwXxYyZzŹźŻż'
         symbols = list('_' + _punctuation + _letters )
+    elif symbol_set == 'shmart2':
+        _punctuation = ":;-,.?!…\"\'"
+        _letters = 'aąbcćdeęfghijklłmnńoópqrsśtuvwxyzźż'
+        symbols = list('_' + _punctuation + _letters )
     else:
         raise Exception("{} symbol set does not exist".format(symbol_set))
 
