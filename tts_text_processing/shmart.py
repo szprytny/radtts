@@ -7,11 +7,16 @@ rules_def: List[Tuple[str, str]] = [
     ('zż', 'z-ż'),
     ('ww', 'w_w'),
     ('odziem', 'od_ziem'),
+    ('\'', ''),
     ('”', '"'),
     ('„', '"'),
     ('–', '-'),
     ('...', '…'),
     ('arzn', 'ar_zn'),
+    ('arzł', 'ar_zł'),
+    ('asilo', 'as_ilo'),
+    (' tarzan', ' tar_zan'),
+    ('mierzi', 'mier_zi'),
     ('zinte', 'z_inte'),
     (' bruce', ' brus'),
     (' hulk', ' halk'),
@@ -30,6 +35,26 @@ rules_def: List[Tuple[str, str]] = [
     ('carring', 'karing'),
     ('izaac', 'izaak'),
     ('sprite', 'sprajt'),
+    ('avonlea', 'avonli'),
+    (' chubb', 'czab'),
+    (' nigel', ' najdżel'),
+    (' pauline', ' polin'),
+    (' jerome', ' dżerom'),
+    ('rodney', 'rodnij'),
+    ('morgarath', 'morgaraf'),
+    (' horace', ' horys'),
+    (' mount ', ' maunt '),
+    ('beethoven', 'betoven'),
+    ('mozart', 'mocart'),
+    ('howard', 'hałard'),
+    (' clara', ' klara'),
+    (' duncan', ' dankan'),
+    (' hackham', ' hakam'),
+    ('slipsunder', 'slipsander'),
+    (' george', 'dżordż'),
+    (' will', ' łil'), #unsafe (willa)
+    (' sir ', ' ser '),
+    (' jenny', ' dżeny')
 ]
     
 def gen_rule(rule_tuple: Tuple[str, str]) -> Tuple[re.Pattern, str]:
@@ -56,7 +81,7 @@ def gen_rule(rule_tuple: Tuple[str, str]) -> Tuple[re.Pattern, str]:
 
     return re.compile(_from_rule), _to_rule
 
-rules = map(gen_rule, rules_def)
+rules = [*map(gen_rule, rules_def)]
 
 def shmart_replace(text: str) -> str:
     text = text.replace('GLKiH', 'Gie eL Ka i Ha')
