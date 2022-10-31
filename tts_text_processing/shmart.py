@@ -56,7 +56,9 @@ rules_def: List[Tuple[str, str]] = [
     (' sir ', ' ser '),
     (' jenny', ' dżeny'),
     (' rosie ', ' roz_i '),
-    (' melanie ', ' melani ')
+    (' melanie ', ' melani '),
+    (' caldwell ', ' kaldłel '),
+    (' kitty ', ' ki_ti ')
 ]
     
 def gen_rule(rule_tuple: Tuple[str, str]) -> Tuple[re.Pattern, str]:
