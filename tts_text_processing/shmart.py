@@ -54,7 +54,9 @@ rules_def: List[Tuple[str, str]] = [
     (' george', 'dżordż'),
     (' will', ' łil'), #unsafe (willa)
     (' sir ', ' ser '),
-    (' jenny', ' dżeny')
+    (' jenny', ' dżeny'),
+    (' rosie ', ' roz_i '),
+    (' melanie ', ' melani ')
 ]
     
 def gen_rule(rule_tuple: Tuple[str, str]) -> Tuple[re.Pattern, str]:
