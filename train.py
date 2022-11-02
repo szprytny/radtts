@@ -298,11 +298,11 @@ def compute_validation_loss(iteration, model, criterion, valset, collate_fn,
 
 
 def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
-          weight_decay, sigma, iters_per_checkpoint, batch_size, seed,
+          weight_decay, sigma, iters_per_checkpoint, iters_per_validation, batch_size, seed,
           checkpoint_path, ignore_layers, ignore_layers_warmstart,
           include_layers, finetune_layers, warmstart_checkpoint_path,
           use_amp, grad_clip_val, loss_weights,
-          binarization_start_iter=-1, kl_loss_start_iter=-1,
+          binarization_start_epoch=-1, kl_loss_start_epoch=-1,
           unfreeze_modules="all", **kwargs):
 
     if seed is None:
@@ -376,17 +376,21 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
     model.train()
 
     epoch_offset = max(0, int(iteration / len(train_loader)))
+    batch_offset = max(0, iteration % len(train_loader))
     # ================ MAIN TRAINNIG LOOP! ===================
     for epoch in range(epoch_offset, epochs):
         print("Epoch: {}".format(epoch))
-        for batch in train_loader:
+        for batch_no, batch in enumerate(train_loader):
+            if batch_no < batch_offset : continue
+            else: batch_offset = 0
+
             tic = timer()
             model.zero_grad()
             (mel, speaker_ids, text, in_lens, out_lens, attn_prior,
              f0, voiced_mask, p_voiced, energy_avg,
              audiopaths) = parse_data_from_batch(batch)
 
-            if iteration >= binarization_start_iter:
+            if iteration >= binarization_start_epoch:
                 binarize = True   # binarization training phase
             else:
                 binarize = False  # no binarization, soft alignments only
@@ -405,7 +409,7 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
                         loss = v * w if loss is None else loss + v * w
 
                 w_bin = criterion.loss_weights.get('binarization_loss_weight', 1.0)
-                if binarize and iteration >= kl_loss_start_iter:
+                if binarize and iteration >= kl_loss_start_epoch:
                     binarization_loss = attention_kl_loss(
                         outputs['attn'], outputs['attn_soft'])
                     loss += binarization_loss * w_bin
@@ -442,17 +446,19 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
                 save_checkpoint(model, optimizer, learning_rate, iteration,
                                 checkpoint_path)
 
-            if iteration > -1 and iteration % iters_per_checkpoint == 0:
+            if iteration > -1 and iteration % iters_per_validation == 0:
                 if rank == 0:
                     val_loss_outputs = compute_validation_loss(
                         iteration, model, criterion, valset, collate_fn,
                         batch_size, n_gpus, logger=logger,
                         train_config=train_config)
-                    checkpoint_path = "{}/model_{}".format(
-                        output_directory, iteration)
-                    save_checkpoint(model, optimizer, learning_rate, iteration,
-                                    checkpoint_path)
                     print('Validation loss:', val_loss_outputs)
+
+                    if iteration > 0 and iteration % iters_per_checkpoint == 0:
+                        checkpoint_path = "{}/model_{}".format(
+                            output_directory, iteration)
+                        save_checkpoint(model, optimizer, learning_rate, iteration,
+                                        checkpoint_path)
                 else:
                     val_loss_outputs = compute_validation_loss(
                         iteration, model, criterion, valset, collate_fn,
