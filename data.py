@@ -39,6 +39,7 @@
 ###############################################################################
 
 import os
+import re
 import argparse
 import json
 import numpy as np
@@ -142,6 +143,8 @@ class Data(torch.utils.data.Dataset):
             self.filter_by_duration_(dur_min, dur_max)
             print("Number of files after duration filtering", len(self.data))
 
+        self.filter_out_broken()
+
         self.use_attn_prior_masking = bool(use_attn_prior_masking)
         self.prepend_space_to_text = bool(prepend_space_to_text)
         self.append_space_to_text = bool(append_space_to_text)
@@ -199,6 +202,11 @@ class Data(torch.utils.data.Dataset):
             self.data = [x for x in self.data if x['speaker'] in speakers]
         else:
             self.data = [x for x in self.data if x['speaker'] not in speakers]
+
+    def filter_out_broken(self):
+        self.data = [
+            x for x in self.data
+            if re.search(r'((\w)\2{4,})', x['text']) is None ]
 
     def filter_by_duration_(self, dur_min, dur_max):
         self.data = [

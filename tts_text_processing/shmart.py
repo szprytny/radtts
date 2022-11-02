@@ -63,6 +63,8 @@ rules_def: List[Tuple[str, str]] = [
     (' cushing ', ' kaszing '),
     (' chandler ', ' czendler '),
     (' newport ', ' niuport '),
+    (' david ', ' dejwid '),
+    (' fielding ', ' filding '),
 ]
     
 def gen_rule(rule_tuple: Tuple[str, str]) -> Tuple[re.Pattern, str]:
