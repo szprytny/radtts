@@ -144,6 +144,7 @@ class Data(torch.utils.data.Dataset):
             print("Number of files after duration filtering", len(self.data))
 
         self.filter_out_broken()
+        print("Number of files after broken filtering", len(self.data))
 
         self.use_attn_prior_masking = bool(use_attn_prior_masking)
         self.prepend_space_to_text = bool(prepend_space_to_text)

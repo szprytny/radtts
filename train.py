@@ -446,6 +446,12 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
                 save_checkpoint(model, optimizer, learning_rate, iteration,
                                 checkpoint_path)
 
+            if iteration > 0 and iteration % iters_per_checkpoint == 0:
+                checkpoint_path = "{}/model_{}".format(
+                    output_directory, iteration)
+                save_checkpoint(model, optimizer, learning_rate, iteration,
+                                checkpoint_path)
+                                
             if iteration > -1 and iteration % iters_per_validation == 0:
                 if rank == 0:
                     val_loss_outputs = compute_validation_loss(
@@ -454,11 +460,6 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
                         train_config=train_config)
                     print('Validation loss:', val_loss_outputs)
 
-                    if iteration > 0 and iteration % iters_per_checkpoint == 0:
-                        checkpoint_path = "{}/model_{}".format(
-                            output_directory, iteration)
-                        save_checkpoint(model, optimizer, learning_rate, iteration,
-                                        checkpoint_path)
                 else:
                     val_loss_outputs = compute_validation_loss(
                         iteration, model, criterion, valset, collate_fn,
