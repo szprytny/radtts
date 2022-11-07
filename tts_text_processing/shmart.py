@@ -18,6 +18,7 @@ rules_def: List[Tuple[str, str]] = [
     (' tarzan', ' tar_zan'),
     ('mierzi', 'mier_zi'),
     ('zinte', 'z_inte'),
+    ('hunter', 'hanter'),
     (' bruce', ' brus'),
     (' hulk', ' halk'),
     ('she-hulk', 'szi-halk'),

@@ -390,7 +390,7 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
              f0, voiced_mask, p_voiced, energy_avg,
              audiopaths) = parse_data_from_batch(batch)
 
-            if iteration >= binarization_start_epoch:
+            if epoch >= binarization_start_epoch:
                 binarize = True   # binarization training phase
             else:
                 binarize = False  # no binarization, soft alignments only
@@ -409,7 +409,7 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
                         loss = v * w if loss is None else loss + v * w
 
                 w_bin = criterion.loss_weights.get('binarization_loss_weight', 1.0)
-                if binarize and iteration >= kl_loss_start_epoch:
+                if binarize and epoch >= kl_loss_start_epoch:
                     binarization_loss = attention_kl_loss(
                         outputs['attn'], outputs['attn_soft'])
                     loss += binarization_loss * w_bin
