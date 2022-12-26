@@ -39,6 +39,7 @@
 ###############################################################################
 
 import os
+from random import shuffle
 import re
 import argparse
 import json
@@ -88,12 +89,11 @@ class Data(torch.utils.data.Dataset):
                  append_space_to_text=True, add_bos_eos_to_text=False,
                  betabinom_cache_path="", betabinom_scaling_factor=0.05,
                  lmdb_cache_path="", dur_min=None, dur_max=None,
-                 combine_speaker_and_emotion=False, **kwargs):
+                 combine_speaker_and_emotion=False, load_data=True, **kwargs):
 
         self.combine_speaker_and_emotion = combine_speaker_and_emotion
         self.max_wav_value = max_wav_value
         self.audio_lmdb_dict = {}  # dictionary of lmdbs for audio data
-        self.data = self.load_data(datasets)
         self.distance_tx_unvoiced = False
         if 'distance_tx_unvoiced' in kwargs.keys():
             self.distance_tx_unvoiced = kwargs['distance_tx_unvoiced']
@@ -128,23 +128,28 @@ class Data(torch.utils.data.Dataset):
 
         self.dur_min = dur_min
         self.dur_max = dur_max
+
+        if load_data:
+            self.data = self.load_data(datasets)
+            print("Number of files", len(self.data))
+            if include_speakers is not None:
+                for (speaker_set, include) in include_speakers:
+                    self.filter_by_speakers_(speaker_set, include)
+                print("Number of files after speaker filtering", len(self.data))
+
+            if dur_min is not None and dur_max is not None:
+                self.filter_by_duration_(dur_min, dur_max)
+                print("Number of files after duration filtering", len(self.data))
+
+            self.filter_out_broken()
+            print("Number of files after broken filtering", len(self.data))
+
         if speaker_ids is None or speaker_ids == '':
+            if not load_data:
+                self.data = self.load_data(datasets)
             self.speaker_ids = self.create_speaker_lookup_table(self.data)
         else:
             self.speaker_ids = speaker_ids
-
-        print("Number of files", len(self.data))
-        if include_speakers is not None:
-            for (speaker_set, include) in include_speakers:
-                self.filter_by_speakers_(speaker_set, include)
-            print("Number of files after speaker filtering", len(self.data))
-
-        if dur_min is not None and dur_max is not None:
-            self.filter_by_duration_(dur_min, dur_max)
-            print("Number of files after duration filtering", len(self.data))
-
-        self.filter_out_broken()
-        print("Number of files after broken filtering", len(self.data))
 
         self.use_attn_prior_masking = bool(use_attn_prior_masking)
         self.prepend_space_to_text = bool(prepend_space_to_text)
@@ -198,7 +203,7 @@ class Data(torch.utils.data.Dataset):
         return dataset
 
     def filter_by_speakers_(self, speakers, include=True):
-        print("Include spaker {}: {}".format(speakers, include))
+        print("Include speaker {}: {}".format(speakers, include))
         if include:
             self.data = [x for x in self.data if x['speaker'] in speakers]
         else:
@@ -401,6 +406,7 @@ class Data(torch.utils.data.Dataset):
                 'p_voiced': p_voiced,
                 'voiced_mask': voiced_mask,
                 'energy_avg': energy_avg,
+                'duration': data['duration'],
                 }
 
     def __len__(self):
@@ -502,6 +508,54 @@ class DataCollate():
                 'energy_avg': energy_avg_padded
                 }
 
+# adapted from https://gist.github.com/TrentBrick/bac21af244e7c772dc8651ab9c58328c
+class DurationSampler(torch.utils.data.Sampler):
+    def __init__(self, data_source: Data,  
+                bucket_boundaries, batch_size=64):
+        ind_n_len = []
+        for i, p in enumerate(data_source):
+            ind_n_len.append( (i, p['duration']) )
+        self.ind_n_len = ind_n_len
+        self.bucket_boundaries = bucket_boundaries
+        self.batch_size = batch_size
+        
+        
+    def __iter__(self):
+        data_buckets = dict()
+        # where p is the id number and seq_len is the length of this id number. 
+        for p, seq_len in self.ind_n_len:
+            pid = self.element_to_bucket_id(p, seq_len)
+            if pid in data_buckets.keys():
+                data_buckets[pid].append(p)
+            else:
+                data_buckets[pid] = [p]
+
+        for k in data_buckets.keys():
+
+            data_buckets[k] = np.asarray(data_buckets[k])
+
+        iter_list = []
+        for k in data_buckets.keys():
+            np.random.shuffle(data_buckets[k])
+            iter_list += (np.array_split(data_buckets[k]
+                           , int(data_buckets[k].shape[0]/self.batch_size)))
+        shuffle(iter_list) # shuffle all the batches so they arent ordered by bucket
+        # size
+        for i in iter_list: 
+            yield i.tolist() # as it was stored in an array
+    
+    def __len__(self):
+        return len(self.data_source)
+    
+    def element_to_bucket_id(self, x, seq_length):
+        boundaries = list(self.bucket_boundaries)
+        buckets_min = [np.iinfo(np.int32).min] + boundaries
+        buckets_max = boundaries + [np.iinfo(np.int32).max]
+        conditions_c = np.logical_and(
+          np.less_equal(buckets_min, seq_length),
+          np.less(seq_length, buckets_max))
+        bucket_id = np.min(np.where(conditions_c))
+        return bucket_id
 
 # ===================================================================
 # Takes directory of clean audio and makes directory of spectrograms

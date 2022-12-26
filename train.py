@@ -27,10 +27,9 @@ from timeit import default_timer as timer
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch.cuda import amp
-from radam import RAdam
 from loss import RADTTSLoss, AttentionBinarizationLoss
 from radtts import RADTTS
-from data import Data, DataCollate
+from data import Data, DataCollate, DurationSampler
 from plotting_utils import plot_alignment_to_numpy
 from common import update_params
 import numpy as np
@@ -144,13 +143,14 @@ def prepare_dataloaders(data_config, n_gpus, batch_size):
 
     collate_fn = DataCollate()
 
-    train_sampler, shuffle = None, True
+    train_sampler = DurationSampler(trainset, [0.3, 1.2, 2.5, 4.0, 5.8, 7.6, 10.2], batch_size)
+    shuffle = False
     if n_gpus > 1:
         train_sampler, shuffle = DistributedSampler(trainset), False
 
-    train_loader = DataLoader(trainset, num_workers=4, shuffle=shuffle,
-                              sampler=train_sampler, batch_size=batch_size,
-                              pin_memory=False, drop_last=True,
+    train_loader = DataLoader(trainset, num_workers=0, shuffle=shuffle,
+                              batch_sampler=train_sampler, batch_size=1,
+                              pin_memory=False, drop_last=False,
                               collate_fn=collate_fn)
 
     return train_loader, valset, collate_fn
@@ -176,30 +176,34 @@ def warmstart(checkpoint_path, model, include_layers=[],
     return model
 
 
-def load_checkpoint(checkpoint_path, model, optimizer, ignore_layers=[]):
+def load_checkpoint(checkpoint_path, model, ignore_layers=[]):
     checkpoint_dict = torch.load(checkpoint_path, map_location='cpu')
     iteration = checkpoint_dict['iteration']
     model_dict = checkpoint_dict['state_dict']
-    optimizer.load_state_dict(checkpoint_dict['optimizer'])
+    optimizer_dict = checkpoint_dict['optimizer']
     model.load_state_dict(model_dict)
     print("Loaded checkpoint '{}' (iteration {})" .format(
         checkpoint_path, iteration))
-    return model, optimizer, iteration
+    return model, optimizer_dict, iteration
 
 
-def save_checkpoint(model, optimizer, learning_rate, iteration, filepath):
+def save_checkpoint(model, optimizer, learning_rate, iteration, filepath, speaker_ids):
     print("Saving model and optimizer state at iteration {} to {}".format(
           iteration, filepath))
 
     torch.save({'state_dict': model.state_dict(),
                 'iteration': iteration,
                 'optimizer': optimizer.state_dict(),
-                'learning_rate': learning_rate}, filepath)
+                'learning_rate': learning_rate,
+                'speaker_ids': speaker_ids,
+                'config': config}, filepath)
 
 
 def compute_validation_loss(iteration, model, criterion, valset, collate_fn,
-                            batch_size, n_gpus, logger=None, train_config=None):
-
+                            batch_size, n_gpus, logger:SummaryWriter=None, train_config=None):
+    if logger is not None:
+        n_speakers_log = train_config["n_speakers_log"]
+        speakers_logged = []
     model.eval()
     with torch.no_grad():
         val_sampler = DistributedSampler(valset) if n_gpus > 1 else None
@@ -227,72 +231,74 @@ def compute_validation_loss(iteration, model, criterion, valset, collate_fn,
                 else:
                     loss_outputs_full[k] = (reduced_v / n_batches)
 
+            speaker_id = speaker_ids[0:1].item()
+            if logger is not None and len(speakers_logged) < n_speakers_log and speaker_id not in speakers_logged:
+                speakers_logged.append(speaker_id)
+
+                attn_used = outputs['attn']
+                attn_soft = outputs['attn_soft']
+                audioname = os.path.basename(audiopaths[0])
+                if attn_used is not None:
+                    attribute_sigmas = []
+                    log_decoder_samples = train_config['log_decoder_samples']
+
+                    if log_decoder_samples:
+                        logger.add_image(
+                            f'attention_weights_{speaker_id}',
+                            plot_alignment_to_numpy(
+                                attn_soft[0, 0].data.cpu().numpy().T, title=audioname),
+                            iteration, dataformats='HWC')
+                        logger.add_image(
+                            f'attention_weights_mas_{speaker_id}',
+                            plot_alignment_to_numpy(
+                                attn_used[0, 0].data.cpu().numpy().T, title=audioname),
+                            iteration, dataformats='HWC')
+                        attribute_sigmas.append(-1)
+
+                    if train_config['log_attribute_samples']: # attribute prediction
+                        if model.is_attribute_unconditional():
+                            attribute_sigmas.extend([1.0])
+                        else:
+                            attribute_sigmas.extend([0.1, 0.667])
+                    if len(attribute_sigmas) > 0:
+                        durations = attn_used[0, 0].sum(0, keepdim=True)
+                        durations = (durations + 0.5).floor().int()
+                        # load vocoder to CPU to avoid taking up valuable GPU vRAM
+                        vocoder_checkpoint_path = train_config['vocoder_checkpoint_path']
+                        vocoder_config_path = train_config['vocoder_config_path']
+                        vocoder, denoiser = load_vocoder(
+                            vocoder_checkpoint_path, vocoder_config_path, to_cuda=False)
+                        for attribute_sigma in attribute_sigmas:
+                            try:
+                                if attribute_sigma > 0.0:
+                                    model_output = model.infer(
+                                        speaker_ids[0:1], text[0:1], 0.8,
+                                        dur=durations, f0=None, energy_avg=None,
+                                        voiced_mask=None, sigma_f0=attribute_sigma,
+                                        sigma_energy=attribute_sigma)
+                                else:
+                                    model_output = model.infer(
+                                        speaker_ids[0:1], text[0:1], 0.8,
+                                        dur=durations, f0=f0[0:1, :durations.sum()],
+                                        energy_avg=energy_avg[0:1, :durations.sum()],
+                                        voiced_mask=voiced_mask[0:1, :durations.sum()])
+                            except:
+                                print("Instability or issue occured during inference, skipping sample generation for TB logger")
+                                continue
+
+                            mels = model_output['mel']
+                            audio = vocoder(mels.cpu()).float()[0]
+                            audio_denoised = denoiser(
+                                audio, strength=0.00001)[0].float()
+                            audio_denoised = audio_denoised[0].detach().cpu().numpy()
+                            audio_denoised = audio_denoised / np.abs(audio_denoised).max()
+                            sample_tag = f"decoder_sample_gt_attributes_{speaker_id}{'' if attribute_sigma < 0 else f'_{attribute_sigma}'}"
+                            logger.add_audio(sample_tag, audio_denoised, iteration, data_config['sampling_rate'])
+
     if logger is not None:
         for k, v in loss_outputs_full.items():
             logger.add_scalar('val/'+k, v, iteration)
-        attn_used = outputs['attn']
-        attn_soft = outputs['attn_soft']
-        audioname = os.path.basename(audiopaths[0])
-        if attn_used is not None:
-            logger.add_image(
-                'attention_weights',
-                plot_alignment_to_numpy(
-                    attn_soft[0, 0].data.cpu().numpy().T, title=audioname),
-                iteration, dataformats='HWC')
-            logger.add_image(
-                'attention_weights_mas',
-                plot_alignment_to_numpy(
-                    attn_used[0, 0].data.cpu().numpy().T, title=audioname),
-                iteration, dataformats='HWC')
-            attribute_sigmas = []
-            """ NOTE: if training vanilla radtts (no attributes involved),
-            use log_attribute_samples only, as there will be no ground truth
-            features available. The infer function in this case will work with
-            f0=None, energy_avg=None, and voiced_mask=None
-            """
-            if train_config['log_decoder_samples']: # decoder with gt features
-                attribute_sigmas.append(-1)
-            if train_config['log_attribute_samples']: # attribute prediction
-                if model.is_attribute_unconditional():
-                    attribute_sigmas.extend([1.0])
-                else:
-                    attribute_sigmas.extend([0.1, 0.5, 0.8, 1.0])
-            if len(attribute_sigmas) > 0:
-                durations = attn_used[0, 0].sum(0, keepdim=True)
-                durations = (durations + 0.5).floor().int()
-                # load vocoder to CPU to avoid taking up valuable GPU vRAM
-                vocoder_checkpoint_path = train_config['vocoder_checkpoint_path']
-                vocoder_config_path = train_config['vocoder_config_path']
-                vocoder, denoiser = load_vocoder(
-                    vocoder_checkpoint_path, vocoder_config_path, to_cuda=False)
-                for attribute_sigma in attribute_sigmas:
-                    try:
-                        if attribute_sigma > 0.0:
-                            model_output = model.infer(
-                                speaker_ids[0:1], text[0:1], 0.8,
-                                dur=durations, f0=None, energy_avg=None,
-                                voiced_mask=None, sigma_f0=attribute_sigma,
-                                sigma_energy=attribute_sigma)
-                        else:
-                            model_output = model.infer(
-                                speaker_ids[0:1], text[0:1], 0.8,
-                                dur=durations, f0=f0[0:1, :durations.sum()],
-                                energy_avg=energy_avg[0:1, :durations.sum()],
-                                voiced_mask=voiced_mask[0:1, :durations.sum()])
-                    except:
-                        print("Instability or issue occured during inference, skipping sample generation for TB logger")
-                        continue
-                    mels = model_output['mel']
-                    audio = vocoder(mels.cpu()).float()[0]
-                    audio_denoised = denoiser(
-                        audio, strength=0.00001)[0].float()
-                    audio_denoised = audio_denoised[0].detach().cpu().numpy()
-                    audio_denoised = audio_denoised / np.abs(audio_denoised).max()
-                    if attribute_sigma < 0:
-                        sample_tag = "decoder_sample_gt_attributes"
-                    else:
-                        sample_tag = f"sample_attribute_sigma_{attribute_sigma}"
-                    logger.add_audio(sample_tag, audio_denoised, iteration, data_config['sampling_rate'])
+      
     model.train()
     return loss_outputs_full
 
@@ -328,7 +334,6 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
     attention_kl_loss = AttentionBinarizationLoss()
     model = RADTTS(**model_config).cuda()
 
-    print("Initializing {} optimizer".format(optim_algo))
     if len(finetune_layers):
         for name, param in model.named_parameters():
             if any([l in name for l in finetune_layers]):  # short list hack
@@ -337,16 +342,10 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
             else:
                 param.requires_grad = False
 
-    if optim_algo == 'Adam':
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate,
-                                     weight_decay=weight_decay)
-    elif optim_algo == 'RAdam':
-        optimizer = RAdam(model.parameters(), lr=learning_rate,
-                          weight_decay=weight_decay)
-    else:
-        print("Unrecognized optimizer {}!".format(optim_algo))
-        exit(1)
+    print("Initializing {} optimizer".format(optim_algo))
 
+    optimizer_constructor = getattr(torch.optim, optim_algo) if hasattr(torch.optim, optim_algo) else torch.optim.AdamW
+    optimizer = optimizer_constructor(model.parameters(), lr=learning_rate, weight_decay=weight_decay, betas=[0.8, 0.99])
     # Load checkpoint if one exists
     iteration = 0
     if warmstart_checkpoint_path != "":
@@ -354,13 +353,14 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
                           ignore_layers_warmstart)
 
     if checkpoint_path != "":
-        model, optimizer, iteration = load_checkpoint(
-            checkpoint_path, model, optimizer, ignore_layers)
+        model, optimizer_dict, iteration = load_checkpoint(
+            checkpoint_path, model, ignore_layers)
+        optimizer.load_state_dict(optimizer_dict)
         iteration += 1  # next iteration is iteration + 1
 
     if n_gpus > 1:
         model = apply_gradient_allreduce(model)
-    print(model)
+    #print(model)
     scaler = amp.GradScaler(enabled=use_amp)
 
     for param_group in optimizer.param_groups:
@@ -427,8 +427,7 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
 
             toc = timer()
             current_lr = optimizer.param_groups[0]['lr']
-            print_list = ["iter: {}  ({:.2f} s)  |  lr: {}".format(
-                iteration, toc-tic, current_lr)]
+            print_list = [f"iter: {iteration}  ({toc-tic:.2f} s)  |  lr: {current_lr:.8g}"]
 
             for k, (v, w) in loss_outputs.items():
                 reduced_v = reduce_tensor(v, n_gpus, 0).item()
@@ -443,16 +442,16 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
             if iteration % iters_per_checkpoint != 0 and iteration % 200 == 0:
                 checkpoint_path = "{}/latest_model.pt".format(
                     output_directory)
-                save_checkpoint(model, optimizer, learning_rate, iteration,
-                                checkpoint_path)
+                save_checkpoint(model, optimizer, current_lr, iteration,
+                                checkpoint_path, valset.speaker_ids)
 
             if iteration > 0 and iteration % iters_per_checkpoint == 0:
                 checkpoint_path = "{}/model_{}".format(
                     output_directory, iteration)
-                save_checkpoint(model, optimizer, learning_rate, iteration,
-                                checkpoint_path)
+                save_checkpoint(model, optimizer, current_lr, iteration,
+                                checkpoint_path, valset.speaker_ids)
                                 
-            if iteration > -1 and iteration % iters_per_validation == 0:
+            if iteration > 0 and iteration % iters_per_validation == 0:
                 if rank == 0:
                     val_loss_outputs = compute_validation_loss(
                         iteration, model, criterion, valset, collate_fn,

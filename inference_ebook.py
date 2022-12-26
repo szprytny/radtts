@@ -18,183 +18,138 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
-import random
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pylab as plt
-import argparse
 import os
-import json
-import numpy as np
 import torch
+import numpy as np
 from torch.cuda import amp
 from scipy.io.wavfile import write
 
-from radtts import RADTTS
-from data import Data
-from common import update_params
+from infer.helpers import load_models
 
-from hifigan_models import Generator
-from hifigan_env import AttrDict
-from hifigan_denoiser import Denoiser
+# 0-Narrator
+# 1-Will
+# 2-Jenny
+# 3-George
+# 4-Horace
+# 5-Alyss
+# 6-Lady Pauline
+# 7-Sir Rodney
+# 8-Baron Arald
+# 9-Sekretarz Martin
+# 10-Skryba Nigel
+# 11-Kuchmistrz Chubb
+# 12-Mistrz koni Ulf
+# 13-Zwiadowca Halt
+# 14-Aida
+# 15-Bryn
+# 16-Jerome
+# 17-Sir Karel
+# 18-Starszy Kadet Paul
+# 19-Sir Morton
+# 20-Stary Bob
 
+text_path = 'C:/model/ebook.txt'
+output_dir = 'C:/outdir/audio2'
+
+models_paths = [
+    ('C:/outdir/models/man127low/shmart.pt', 'C:\outdir\models\man127low/config.json', 'c:/shmart/hifigan/cp_hifigan/g_latest', 'c:/shmart/hifigan/cp_hifigan/config.json'),
+    ('C:/outdir/models/woman49pitch150/shmart.pt', 'C:/outdir/models/woman49pitch150/config.json', 'c:/shmart/hifigan/cp_hifigan_woman/g_latest', 'c:/shmart/hifigan/cp_hifigan_woman/config.json'),
+    # ('C:/outdir/models/mixed/shmart.pt', 'C:/outdir/models/mixed/config.json', 'c:/shmart/hifigan/cp_hifigan_man/g_00510000', 'c:/shmart/hifigan/cp_hifigan/config.json'),
+]
+
+speakers_map = {
+    '0': ('S', 'Szprytny'),
+    '1': ('M', 'Milten'),
+    '2': ('F', 'Barbara Kałużna'),
+    '3': ('M', 'Talas'),
+    '4': ('M', 'Kirgo'),
+    '5': ('F', 'Cirilla'),
+    '6': ('F', 'Karolina Gorczyca'),
+    '7': ('M', 'Crach'),
+    '8': ('M', 'Olgierd'),
+    '9': ('M', 'ChamberlainEmhyr'),
+    '10': ( 'M', 'Hjort'),
+    '11': ( 'M', 'Snaf'),
+    '12': ( 'M', 'Letho'),
+    '13': ( 'M', 'Lambert'),
+    '14': ( 'M', 'Pazura'),
+    '15': ( 'M', 'Grim'),
+    '16': ( 'M', 'Dusty'),
+    '17': ( 'M', 'Roche'),
+    '18': ( 'M', 'Raven'),
+    '19': ( 'M', 'Voorhis'),
+    '20': ( 'M', 'Vesemir'),
+}
 
 def lines_to_list(filename):
     """
     Takes a text file of filenames and makes a list of filenames
     """
     with open(filename, encoding='utf-8') as f:
-        files = f.readlines()
+        lines = f.readlines()
 
-    files = [f.rstrip() for f in files]
-    return files
+    lines = [f.rstrip() for f in lines]
+    return lines
 
 
-def load_vocoder(vocoder_path, config_path, to_cuda=True):
-    with open(config_path) as f:
-        data_vocoder = f.read()
-    config_vocoder = json.loads(data_vocoder)
-    h = AttrDict(config_vocoder)
-    if 'blur' in vocoder_path:
-        config_vocoder['gaussian_blur']['p_blurring'] = 0.5
-    else:
-        if 'gaussian_blur' in config_vocoder:
-            config_vocoder['gaussian_blur']['p_blurring'] = 0.0
-        else:
-            config_vocoder['gaussian_blur'] = {'p_blurring': 0.0}
-            h['gaussian_blur'] = {'p_blurring': 0.0}
-
-    state_dict_g = torch.load(vocoder_path, map_location='cpu')['generator']
-
-    # load hifigan
-    vocoder = Generator(h)
-    vocoder.load_state_dict(state_dict_g)
-    denoiser = Denoiser(vocoder)
-    if to_cuda:
-        vocoder.cuda()
-        denoiser.cuda()
-    vocoder.eval()
-    denoiser.eval()
-
-    return vocoder, denoiser
-
-def infer(radtts_path, vocoder_path, vocoder_config_path, text_path, speaker,
-          speaker_text, speaker_attributes, sigma, sigma_tkndur, sigma_f0,
-          sigma_energy, f0_mean, f0_std, energy_mean, energy_std,
-          token_dur_scaling, denoising_strength, n_takes, output_dir, use_amp,
-          plot, seed):
+def infer():
+    seed = 1337
 
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
 
-    vocoder, denoiser = load_vocoder(vocoder_path, vocoder_config_path)
-    radtts = RADTTS(**model_config).cuda()
-    radtts.enable_inverse_cache() # cache inverse matrix for 1x1 invertible convs
+    model1 = load_models(*models_paths[0])
+    model2 = load_models(*models_paths[1])
+    # model3 = load_models(*models_paths[2])
 
-    checkpoint_dict = torch.load(radtts_path, map_location='cpu')
-    state_dict = checkpoint_dict['state_dict']
-    radtts.load_state_dict(state_dict, strict=False)
-    radtts.eval()
-    print("Loaded checkpoint '{}')" .format(radtts_path))
-
-    ignore_keys = ['training_files', 'validation_files']
-    trainset = Data(
-        data_config['training_files'],
-        **dict((k, v) for k, v in data_config.items() if k not in ignore_keys))
 
     text_list = lines_to_list(text_path)
-    n_takes = 1
 
     os.makedirs(output_dir, exist_ok=True)
     for i, text in enumerate(text_list):
+        suffix_path = f'{i+1:04}'
+        output_path = f"{output_dir}/{suffix_path}.wav"
+
+        if os.path.exists(output_path):
+            continue
+
         speaker, text = text.split('|')
-        speaker_id = trainset.get_speaker_id(speaker).cuda()
+
+        model, _speaker_id = speakers_map[speaker]
+
+        if model == 'S':
+            continue
+        radtts, vocoder, denoiser, trainset = model1 if model == 'M' else model3 if model == 'S' else model2
+
+        speaker_id = trainset.get_speaker_id(_speaker_id).cuda()
         speaker_id_text, speaker_id_attributes = speaker_id, speaker_id
         
         #print(f"{i+1}/{len(text_list)}: {text}")
         text = trainset.get_text(text).cuda()[None]
-        for take in range(n_takes):
-            with amp.autocast(use_amp):
-                with torch.no_grad():
-                    outputs = radtts.infer(
-                        speaker_id, text, sigma, sigma_tkndur, sigma_f0,
-                        sigma_energy, token_dur_scaling, token_duration_max=125,
-                        speaker_id_text=speaker_id_text,
-                        speaker_id_attributes=speaker_id_attributes,
-                        f0_mean=f0_mean, f0_std=f0_std, energy_mean=energy_mean,
-                        energy_std=energy_std)
+        with amp.autocast(False):
+            with torch.no_grad():
+                outputs = radtts.infer(
+                    speaker_id, text, 0.667, 0.667, 0.8,
+                    0.8, 1.00, token_duration_max=100,
+                    speaker_id_text=speaker_id_text,
+                    speaker_id_attributes=speaker_id_attributes,
+                    f0_mean=0, f0_std=0, energy_mean=0,
+                    energy_std=0)
 
-                    mel = outputs['mel']
-                    audio = vocoder(mel).float()[0]
-                    audio_denoised = denoiser(
-                        audio, strength=denoising_strength)[0].float()
+                mel = outputs['mel']
+                audio = vocoder(mel).float()[0]
+                audio_denoised = denoiser(
+                    audio, strength=0.0005)[0].float()
 
-                    audio = audio[0].cpu().numpy()
-                    audio_denoised = audio_denoised[0].cpu().numpy()
-                    audio_denoised = audio_denoised / np.max(np.abs(audio_denoised))
+                audio = audio[0].cpu().numpy()
+                audio_denoised = audio_denoised[0].cpu().numpy()
+                audio_denoised = audio_denoised / np.max(np.abs(audio_denoised))
 
-                    suffix_path = f'{i:04}'
-
-                    write("{}/{}.wav".format(
-                        output_dir, suffix_path),
-                        data_config['sampling_rate'], audio_denoised)
-
-            if plot:
-                fig, axes = plt.subplots(2, 1, figsize=(10, 6))
-                axes[0].plot(outputs['f0'].cpu().numpy()[0], label='f0')
-                axes[1].plot(outputs['energy_avg'].cpu().numpy()[0], label='energy_avg')
-                for ax in axes:
-                    ax.legend(loc='best')
-                plt.tight_layout()
-                fig.savefig("{}/{}_features.png".format(output_dir, suffix_path))
-                plt.close('all')
+                write(output_path, 22050, audio_denoised)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', type=str, help='JSON file config')
-    parser.add_argument('-k', '--config_vocoder', type=str, help='vocoder JSON file config')
-    parser.add_argument('-p', '--params', nargs='+', default=[])
-    parser.add_argument('-r', '--radtts_path', type=str)
-    parser.add_argument('-v', '--vocoder_path', type=str)
-    parser.add_argument('-t', '--text_path', default='sentences.txt', type=str)
-    parser.add_argument('-s', '--speaker', type=str)
-    parser.add_argument('--speaker_text', type=str, default=None)
-    parser.add_argument('--speaker_attributes', type=str, default=None)
-    parser.add_argument('-d', '--denoising_strength', type=float, default=0.0)
-    parser.add_argument('-o', "--output_dir", default="results")
-    parser.add_argument("--sigma", default=0.667, type=float, help="sampling sigma for decoder")
-    parser.add_argument("--sigma_tkndur", default=0.667, type=float, help="sampling sigma for duration")
-    parser.add_argument("--sigma_f0", default=1.0, type=float, help="sampling sigma for f0")
-    parser.add_argument("--sigma_energy", default=1.0, type=float, help="sampling sigma for energy avg")
-    parser.add_argument("--f0_mean", default=0.0, type=float)
-    parser.add_argument("--f0_std", default=0.0, type=float)
-    parser.add_argument("--energy_mean", default=0.0, type=float) #not used
-    parser.add_argument("--energy_std", default=0.0, type=float)#not used
-    parser.add_argument("--token_dur_scaling", default=1.00, type=float)
-    parser.add_argument("--n_takes", default=1, type=int)
-    parser.add_argument("--use_amp", action="store_true")
-    parser.add_argument("--plot", action="store_true")
-    parser.add_argument("--seed", default=1234, type=int)
-    args = parser.parse_args()
-
-    # Parse configs.  Globals nicer in this case
-    with open(args.config) as f:
-        data = f.read()
-
-    global config
-    config = json.loads(data)
-    update_params(config, args.params)
-
-    data_config = config["data_config"]
-    global model_config
-    model_config = config["model_config"]
 
     torch.backends.cudnn.enabled = True
     torch.backends.cudnn.benchmark = False
-    infer(args.radtts_path, args.vocoder_path, args.config_vocoder,
-          args.text_path, args.speaker, args.speaker_text,
-          args.speaker_attributes, args.sigma, args.sigma_tkndur, args.sigma_f0,
-          args.sigma_energy, args.f0_mean, args.f0_std, args.energy_mean,
-          args.energy_std, args.token_dur_scaling, args.denoising_strength,
-          args.n_takes, args.output_dir, args.use_amp, args.plot, args.seed)
+    infer()

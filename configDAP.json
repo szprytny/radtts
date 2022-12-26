@@ -2,23 +2,24 @@
   "train_config": {
     "output_directory": "/debug",
     "epochs": 10000000,
-    "optim_algo": "RAdam",
-    "learning_rate": 75e-5,
-    "weight_decay": 1e-6,
+    "optim_algo": "AdamW",
+    "learning_rate": 2e-4,
+    "weight_decay": 1e-2,
     "sigma": 1.0,
-    "iters_per_checkpoint": 1000,
-    "iters_per_validation": 1000,
-    "batch_size": 12,
+    "iters_per_checkpoint": 5000,
+    "iters_per_validation": 2500,
+    "batch_size": 20,
     "seed": null,
-    "checkpoint_path": "",
+    "checkpoint_path": "/debug/latest_model.pt",
     "ignore_layers": [],
     "ignore_layers_warmstart": [],
     "finetune_layers": [],
     "include_layers": [],
-    "vocoder_config_path": "c:/shmart/hifigan/cp_hifigan/config.json",
-    "vocoder_checkpoint_path": "c:/shmart/hifigan/cp_hifigan/g_00900000",
+    "vocoder_config_path": "/shmart/hifigan/cp_hifigan/config.json",
+    "vocoder_checkpoint_path": "/shmart/hifigan/cp_hifigan/g_latest",
     "log_attribute_samples": true,
-    "log_decoder_samples": true,
+    "log_decoder_samples": false,
+    "n_speakers_log": 5,
     "warmstart_checkpoint_path": "",
     "use_amp": true,
     "grad_clip_val": 1.0,
@@ -38,29 +39,41 @@
   "data_config": {
     "combine_speaker_and_emotion": false,
     "training_files": {
-      "LJS": {
-        "basedir": "C:/model/RAD/",
-        "audiodir": "C:/model/RAD/",
+      "MAN": {
+        "basedir": "D:/audio-datasety/MAN/",
+        "audiodir": "D:/audio-datasety/MAN/",
+        "filelist": "train.txt",
+        "lmdbpath": ""
+      },
+      "WOMAN": {
+        "basedir": "D:/audio-datasety/WOMAN/",
+        "audiodir": "D:/audio-datasety/WOMAN/",
         "filelist": "train.txt",
         "lmdbpath": ""
       }
     },
     "validation_files": {
-      "LJS": {
-        "basedir": "C:/model/RAD/",
-        "audiodir": "C:/model/RAD/",
+      "MAN": {
+        "basedir": "D:/audio-datasety/MAN/",
+        "audiodir": "D:/audio-datasety/MAN/",
+        "filelist": "test.txt",
+        "lmdbpath": ""
+      },
+      "WOMAN": {
+        "basedir": "D:/audio-datasety/WOMAN/",
+        "audiodir": "D:/audio-datasety/WOMAN/",
         "filelist": "test.txt",
         "lmdbpath": ""
       }
     },
-    "dur_min": 0.2,
-    "dur_max": 10.2,
+    "dur_min": null,
+    "dur_max": null,
     "sampling_rate": 22050,
     "filter_length": 1024,
     "hop_length": 256,
     "win_length": 1024,
     "n_mel_channels": 80,
-    "mel_fmin": 20.0,
+    "mel_fmin": 0.0,
     "mel_fmax": 8000.0,
     "f0_min": 80.0,
     "f0_max": 640.0,
@@ -78,7 +91,7 @@
     "handle_phoneme_ambiguous": "ignore",
     "include_speakers": null,
     "n_frames": -1,
-    "betabinom_cache_path": "/debug/data_cache",
+    "betabinom_cache_path": "/debug/data_cache/",
     "lmdb_cache_path": "",
     "use_attn_prior_masking": true,
     "prepend_space_to_text": true,
@@ -95,10 +108,10 @@
   "model_config": {
     "n_speakers": 1,
     "n_speaker_dim": 16,
-    "n_text": 50,
+    "n_text": 47,
     "n_text_dim": 512,
-    "n_flows": 8,
-    "n_conv_layers_per_step": 4,
+    "n_flows": 4,
+    "n_conv_layers_per_step": 5,
     "n_mel_channels": 80,
     "n_hidden": 1024,
     "mel_encoder_n_hidden": 512,
@@ -139,10 +152,10 @@
         "take_log_of_input": true,
         "arch_hparams": {
           "out_dim": 1,
-          "n_layers": 2,
+          "n_layers": 3,
           "n_channels": 256,
-          "kernel_size": 3,
-          "p_dropout": 0.25
+          "kernel_size": 7,
+          "p_dropout": 0.1
         }
       }
     },
@@ -160,10 +173,10 @@
         "use_transformer": false,
         "arch_hparams": {
           "out_dim": 1,
-          "n_layers": 2,
+          "n_layers": 3,
           "n_channels": 256,
           "kernel_size": 11,
-          "p_dropout": 0.5
+          "p_dropout": 0.1
         }
       }
     },
@@ -181,10 +194,10 @@
         "use_transformer": false,
         "arch_hparams": {
           "out_dim": 1,
-          "n_layers": 2,
+          "n_layers": 3,
           "n_channels": 256,
-          "kernel_size": 3,
-          "p_dropout": 0.25
+          "kernel_size": 11,
+          "p_dropout": 0.1
         }
       }
     },
@@ -201,10 +214,10 @@
         },
         "arch_hparams": {
           "out_dim": 1,
-          "n_layers": 2,
+          "n_layers": 3,
           "n_channels": 256,
-          "kernel_size": 3,
-          "p_dropout": 0.5,
+          "kernel_size": 7,
+          "p_dropout": 0.1,
           "lstm_type": "",
           "use_linear": 1
         }
