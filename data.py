@@ -518,13 +518,13 @@ class DurationSampler(torch.utils.data.Sampler):
         self.ind_n_len = ind_n_len
         self.bucket_boundaries = bucket_boundaries
         self.batch_size = batch_size
-        
+        self.data_source=data_source
         
     def __iter__(self):
         data_buckets = dict()
         # where p is the id number and seq_len is the length of this id number. 
         for p, seq_len in self.ind_n_len:
-            pid = self.element_to_bucket_id(p, seq_len)
+            pid = self.element_to_bucket_id(seq_len)
             if pid in data_buckets.keys():
                 data_buckets[pid].append(p)
             else:
@@ -537,8 +537,9 @@ class DurationSampler(torch.utils.data.Sampler):
         iter_list = []
         for k in data_buckets.keys():
             np.random.shuffle(data_buckets[k])
-            iter_list += (np.array_split(data_buckets[k]
-                           , int(data_buckets[k].shape[0]/self.batch_size)))
+            n_sections = int(data_buckets[k].shape[0]/self.batch_size)
+            if n_sections > 0:
+              iter_list += (np.array_split(data_buckets[k], n_sections))
         shuffle(iter_list) # shuffle all the batches so they arent ordered by bucket
         # size
         for i in iter_list: 
@@ -547,7 +548,7 @@ class DurationSampler(torch.utils.data.Sampler):
     def __len__(self):
         return len(self.data_source)
     
-    def element_to_bucket_id(self, x, seq_length):
+    def element_to_bucket_id(self, seq_length):
         boundaries = list(self.bucket_boundaries)
         buckets_min = [np.iinfo(np.int32).min] + boundaries
         buckets_max = boundaries + [np.iinfo(np.int32).max]
