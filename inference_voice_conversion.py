@@ -66,7 +66,7 @@ def infer():
                   **dict((k, v) for k, v in data_config.items()
                   if k not in ignore_keys),
                   speaker_ids=trainset.speaker_ids)
-    collate_fn = DataCollate()
+    collate_fn = DataCollate(**data_config)
     dataloader = DataLoader(valset, num_workers=1, shuffle=False,
                             sampler=None, batch_size=1,
                             pin_memory=False, drop_last=False,

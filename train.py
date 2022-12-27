@@ -141,7 +141,7 @@ def prepare_dataloaders(data_config, n_gpus, batch_size):
                   **dict((k, v) for k, v in data_config_val.items()
                   if k not in ignore_keys), speaker_ids=trainset.speaker_ids)
 
-    collate_fn = DataCollate()
+    collate_fn = DataCollate(**data_config)
 
     train_sampler = DurationSampler(trainset, [0.3, 1.2, 2.5, 4.0, 5.8, 7.6, 10.2], batch_size)
     shuffle = False
