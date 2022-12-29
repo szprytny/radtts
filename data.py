@@ -148,6 +148,7 @@ class Data(torch.utils.data.Dataset):
                      'emotion': emotion,
                      'duration': float(duration),
                      })
+        dataset.reverse()
         return dataset
 
     def filter_by_speakers_(self, speakers, include=True):
@@ -475,8 +476,24 @@ class DurationSampler(torch.utils.data.Sampler):
         self.bucket_boundaries = bucket_boundaries
         self.batch_size = batch_size
         self.data_source=data_source
+        self.buckets = self.prepare_buckets()
         
     def __iter__(self):
+        all_batches = []
+        for k in self.buckets.keys():
+            np.random.shuffle(self.buckets[k])
+            n_sections = int(self.buckets[k].shape[0]/self.batch_size)
+            if n_sections > 0:
+              all_batches += (np.array_split(self.buckets[k], n_sections))
+        shuffle(all_batches)
+        # size
+        for b in all_batches: 
+            yield b.tolist() # as it was stored in an array
+    
+    def __len__(self):
+        return len(self.data_source) // self.batch_size
+    
+    def prepare_buckets(self):
         data_buckets = dict()
         # where p is the id number and seq_len is the length of this id number. 
         for b, p in enumerate(pbar := tqdm(self.data_source)):
@@ -491,21 +508,8 @@ class DurationSampler(torch.utils.data.Sampler):
 
         for k in data_buckets.keys():
             data_buckets[k] = np.asarray(data_buckets[k])
+        return data_buckets
 
-        all_batches = []
-        for k in data_buckets.keys():
-            np.random.shuffle(data_buckets[k])
-            n_sections = int(data_buckets[k].shape[0]/self.batch_size)
-            if n_sections > 0:
-              all_batches += (np.array_split(data_buckets[k], n_sections))
-        shuffle(all_batches)
-        # size
-        for b in all_batches: 
-            yield b.tolist() # as it was stored in an array
-    
-    def __len__(self):
-        return len(self.data_source) // self.batch_size
-    
     def element_to_bucket_id(self, seq_length):
         boundaries = list(self.bucket_boundaries)
         buckets_min = [np.iinfo(np.int32).min] + boundaries

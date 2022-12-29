@@ -12,6 +12,8 @@ def prepare_dataloaders(data_config):
                     **dict((k, v) for k, v in data_config.items()
                     if k not in ignore_keys))
 
+    print(f'numebr of speakers: {len(trainset.speaker_ids)}')
+
     print("initializing validation dataloader")
     data_config_val = data_config.copy()
     data_config_val['aug_probabilities'] = None  # no aug in val set
@@ -19,7 +21,7 @@ def prepare_dataloaders(data_config):
                   **dict((k, v) for k, v in data_config_val.items()
                   if k not in ignore_keys), speaker_ids=trainset.speaker_ids)
 
-    collate_fn = DataCollate()
+    collate_fn = DataCollate(**data_config)
 
     train_sampler, shuffle = None, True
 
