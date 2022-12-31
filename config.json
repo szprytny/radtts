@@ -106,7 +106,7 @@
     "dist_url": "tcp://localhost:54321"
   },
   "model_config": {
-    "n_speakers": 1,
+    "n_speakers": 172,
     "n_speaker_dim": 16,
     "n_text": 47,
     "n_text_dim": 512,
@@ -155,9 +155,9 @@
         },
         "arch_hparams": {
           "out_dim": 1,
-          "n_layers": 3,
+          "n_layers": 4,
           "n_channels": 256,
-          "kernel_size": 7,
+          "kernel_size": 5,
           "p_dropout": 0.1,
           "lstm_type": "",
           "use_linear": 1
