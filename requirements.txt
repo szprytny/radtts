@@ -15,5 +15,5 @@ peakutils
 webrtcvad 
 torch
 torchaudio
-pysubparser
+pysub-parser
 git+https://github.com/jfsantos/maracas@master#egg=maracas

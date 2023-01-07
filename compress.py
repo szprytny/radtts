@@ -10,7 +10,7 @@ def compress(checkpoint_path, output_path):
 
 
 if __name__ == "__main__":
-    base_dir = '/outdir/models/radtts/'
+    base_dir = '/debug/compress/'
     for f in os.listdir(base_dir):
         p = os.path.join(base_dir, f)
         if os.path.isfile(p):
