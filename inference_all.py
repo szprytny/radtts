@@ -58,7 +58,7 @@ def infer():
     os.makedirs(output_dir, exist_ok=True)
     for i, text in enumerate(text_list):
 
-        radtts, vocoder, denoiser, trainset = model
+        radtts, vocode_audio, trainset, data_config = model
         
         for j, speaker in enumerate(trainset.speaker_ids):
             suffix_path = f'{i+1:04}_{j}'
@@ -83,15 +83,9 @@ def infer():
                         energy_std=0)
 
                     mel = outputs['mel']
-                    audio = vocoder(mel).float()[0]
-                    audio_denoised = denoiser(
-                        audio, strength=0.006)[0].float()
+                    audio = vocode_audio(mel)
 
-                    audio = audio[0].cpu().numpy()
-                    audio_denoised = audio_denoised[0].cpu().numpy()
-                    audio_denoised = audio_denoised / np.max(np.abs(audio_denoised))
-
-                    write(output_path, 22050, audio_denoised)
+                    write(output_path, data_config['sampling_rate'], audio)
 
 
 if __name__ == "__main__":

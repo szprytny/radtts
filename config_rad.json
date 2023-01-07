@@ -8,17 +8,17 @@
     "sigma": 1.0,
     "iters_per_checkpoint": 5000,
     "iters_per_validation": 1000,
-    "batch_size": 6,
+    "batch_size": 4,
     "seed": null,
     "checkpoint_path": "",
     "ignore_layers": [],
-    "ignore_layers_warmstart": ["speaker_embedding.weight"],
+    "ignore_layers_warmstart": [],
     "finetune_layers": [],
     "include_layers": [],
     "vocoder_config_path": "c:/shmart/hifigan/cp_hifigan/config.json",
-    "vocoder_checkpoint_path": "c:/shmart/hifigan/cp_hifigan_mix/g_latest",
-    "log_attribute_samples": false,
-    "log_decoder_samples": true,
+    "vocoder_checkpoint_path": "c:/shmart/hifigan/cp_hifigan_p128/g_latest",
+    "log_attribute_samples": true,
+    "log_decoder_samples": false,
     "n_speakers_log": 5,
     "warmstart_checkpoint_path": "",
     "use_amp": true,
@@ -36,6 +36,7 @@
     "kl_loss_start_epoch": 15,
     "unfreeze_modules": "all"
   },
+
   "data_config": {
     "combine_speaker_and_emotion": false,
     "training_files": {
@@ -74,10 +75,10 @@
     "f0_min": 80.0,
     "f0_max": 640.0,
     "max_wav_value": 32768.0,
-    "use_f0": true,
-    "use_log_f0": 0,
-    "use_energy_avg": true,
-    "use_scaled_energy": true,
+    "use_f0": false,
+    "use_log_f0": false,
+    "use_energy_avg": false,
+    "use_scaled_energy": false,
     "symbol_set": "shmart2",
     "cleaner_names": ["shmart_cleaners"],
     "heteronyms_path": "",
@@ -101,12 +102,12 @@
     "dist_url": "tcp://localhost:54321"
   },
   "model_config": {
-    "n_speakers": 172,
+    "n_speakers": 113,
     "n_speaker_dim": 16,
     "n_text": 47,
     "n_text_dim": 512,
-    "n_flows": 4,
-    "n_conv_layers_per_step": 5,
+    "n_flows": 8,
+    "n_conv_layers_per_step": 4,
     "n_mel_channels": 80,
     "n_hidden": 1024,
     "mel_encoder_n_hidden": 512,
@@ -115,7 +116,7 @@
     "n_early_every": 2,
     "n_group_size": 2,
     "affine_model": "wavenet",
-    "include_modules": "decatnvpred",
+    "include_modules": "decatndpm",
     "scaling_fn": "tanh",
     "matrix_decomposition": "LUS",
     "learn_alignments": true,
@@ -123,41 +124,39 @@
     "attn_straight_through_estimator": true,
     "use_context_lstm": true,
     "context_lstm_norm": "spectral",
-    "context_lstm_w_f0_and_energy": true,
+    "context_lstm_w_f0_and_energy": false,
     "text_encoder_lstm_norm": "spectral",
-    "n_f0_dims": 1,
-    "n_energy_avg_dims": 1,
+    "n_f0_dims": 0,
+    "n_energy_avg_dims": 0,
     "use_first_order_features": false,
     "unvoiced_bias_activation": "relu",
     "decoder_use_partial_padding": true,
-    "decoder_use_unvoiced_bias": true,
-    "ap_pred_log_f0": true,
-    "ap_use_unvoiced_bias": true,
-    "ap_use_voiced_embeddings": true,
-    "dur_model_config": null,
-    "f0_model_config": null,
-    "energy_model_config": null,
-    "v_model_config": {
+    "decoder_use_unvoiced_bias": false,
+    "ap_pred_log_f0": false,
+    "ap_use_unvoiced_bias": false,
+    "ap_use_voiced_embeddings": false,
+    "dur_model_config": {
       "name": "dap",
       "hparams": {
         "n_speaker_dim": 16,
-        "take_log_of_input": false,
         "bottleneck_hparams": {
           "in_dim": 512,
           "reduction_factor": 16,
           "norm": "weightnorm",
           "non_linearity": "relu"
         },
+        "take_log_of_input": true,
         "arch_hparams": {
           "out_dim": 1,
-          "n_layers": 4,
+          "n_layers": 2,
           "n_channels": 256,
-          "kernel_size": 5,
-          "p_dropout": 0.1,
-          "lstm_type": "",
-          "use_linear": 1
+          "kernel_size": 3,
+          "p_dropout": 0.25
         }
       }
-    }
+    },
+    "f0_model_config": null,
+    "energy_model_config": null,
+    "v_model_config": null
   }
 }

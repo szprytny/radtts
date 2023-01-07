@@ -36,7 +36,7 @@ import numpy as np
 from distributed import (init_distributed, apply_gradient_allreduce,
                          reduce_tensor)
 from torch.utils.data.distributed import DistributedSampler
-from inference import load_vocoder
+from infer.helpers import load_hifigan
 
 
 def freeze(model):
@@ -73,7 +73,7 @@ def prepare_output_folders_and_logger(output_directory):
 def prepare_model_weights(model, unfreeze_modules):
     if unfreeze_modules != 'all':
         freeze(model) # freeze everything
-        if 'dur' in unfreeze_modules and hasattr(model, 'dur_pred_layer'):
+        if 'dpm' in unfreeze_modules and hasattr(model, 'dur_pred_layer'):
             print("Training duration prediction")
             unfreeze(model.dur_pred_layer)
         if 'f0' in unfreeze_modules and hasattr(model, 'f0_pred_module'):
@@ -266,7 +266,7 @@ def compute_validation_loss(iteration, model, criterion, valset, collate_fn,
                         # load vocoder to CPU to avoid taking up valuable GPU vRAM
                         vocoder_checkpoint_path = train_config['vocoder_checkpoint_path']
                         vocoder_config_path = train_config['vocoder_config_path']
-                        vocoder, denoiser = load_vocoder(
+                        vocoder, denoiser = load_hifigan(
                             vocoder_checkpoint_path, vocoder_config_path, to_cuda=False)
                         for attribute_sigma in attribute_sigmas:
                             try:

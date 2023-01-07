@@ -32,14 +32,13 @@ from train import parse_data_from_batch
 
 
 
-output_dir = 'C:/outdir/audio2'
+output_dir = 'C:/outdir/audio4'
 
 models_paths = [
-    ('D:/colab/RAD/220920/step2/51k.pt', 'D:/colab/RAD/220920/step2/config.json', 'c:/shmart/hifigan/cp_hifigan_man/g_shmart', 'c:/shmart/hifigan/cp_hifigan_man/config.json'),
-    ('C:/outdir/models/witches/step2/model_45000', 'C:/outdir/models/witches/step2//config.json', 'c:/shmart/hifigan/cp_hifigan/g_latest', 'c:/shmart/hifigan/cp_hifigan/config.json'),
+    ('C:/outdir/models/radtts/mix172.pt', '', 'c:/shmart/hifigan/cp_hifigan_p128/g_latest', 'c:/shmart/hifigan/cp_hifigan/config.json'),
 ]
 
-speaker_id = 'Bezi-normal'
+speaker_id = 'shmart2'
 
 def infer():
     seed = 1337
@@ -50,15 +49,13 @@ def infer():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
 
-    radtts, vocoder, denoiser, trainset = load_models(*models_paths[0])
-    model_config, data_config = get_configs(models_paths[0][1], [])
+    radtts, vocode_audio, trainset, data_config = load_models(*models_paths[0])
 
     data_config['validation_files'] = {
         "LJS": {
-            "basedir": "C:/todo/splitted/shmart",
-            "audiodir": "C:/todo/splitted/shmart",
-            "filelist": "test.txt",
-            "lmdbpath": ""
+            "basedir": "C:/todo/splitted/coming",
+            "audiodir": "C:/todo/splitted/coming",
+            "filelist": "test.txt"
         }
     }
 
@@ -109,15 +106,9 @@ def infer():
                 energy_mean=0, energy_std=0)
 
             mel = model_output['mel']
+            audio_denoised = vocode_audio(mel)
 
-
-            audio = vocoder(mel).float()[0]
-            audio_denoised = denoiser(
-                audio, strength=0.01)[0].float()
-            audio = audio[0].cpu().numpy()
-            audio_denoised = audio_denoised[0].cpu().numpy()
-
-            write(output_path ,22050, audio_denoised)
+            write(output_path, data_config['sampling_rate'], audio_denoised)
 
 if __name__ == "__main__":
 

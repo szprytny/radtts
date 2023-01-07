@@ -25,6 +25,8 @@ from torch.cuda import amp
 from scipy.io.wavfile import write
 
 from infer.helpers import load_models
+import sys
+sys.path.append('./infer')
 
 # 0-Narrator
 # 1-Will
@@ -49,35 +51,35 @@ from infer.helpers import load_models
 # 20-Stary Bob
 
 text_path = 'C:/model/ebook.txt'
-output_dir = 'C:/outdir/audio2'
+output_dir = 'C:/outdir/audio4'
 
 models_paths = [
-    ('C:/outdir/models/man127low/shmart.pt', 'C:\outdir\models\man127low/config.json', 'c:/shmart/hifigan/cp_hifigan/g_latest', 'c:/shmart/hifigan/cp_hifigan/config.json'),
-    ('C:/outdir/models/woman49pitch150/shmart.pt', 'C:/outdir/models/woman49pitch150/config.json', 'c:/shmart/hifigan/cp_hifigan_woman/g_latest', 'c:/shmart/hifigan/cp_hifigan_woman/config.json'),
-    # ('C:/outdir/models/mixed/shmart.pt', 'C:/outdir/models/mixed/config.json', 'c:/shmart/hifigan/cp_hifigan_man/g_00510000', 'c:/shmart/hifigan/cp_hifigan/config.json'),
+    ('C:/outdir/models/radtts/shmart.pt', '', 'D:/colab/waveglow/25062022/shmart.pt', '', 'waveglow'),
+    # ('C:/outdir/models/radtts/shmart.pt', '', 'c:/shmart/hifigan/cp_hifigan_p128/g_latest', 'c:/shmart/hifigan/cp_hifigan/config.json'),
+    ('C:/outdir/models/radtts/w49p150.pt', '', 'c:/shmart/hifigan/cp_hifigan_woman/g543k', 'c:/shmart/hifigan/cp_hifigan_woman/config.json'),
 ]
 
 speakers_map = {
-    '0': ('S', 'Szprytny'),
-    '1': ('M', 'Milten'),
+    '0': ('M', 'shmart2', .2),
+    '1': ('M', 'Geralt'),
     '2': ('F', 'Barbara Kałużna'),
-    '3': ('M', 'Talas'),
-    '4': ('M', 'Kirgo'),
+    '3': ('M', 'Barnaba'),
+    '4': ('M', 'Kharim'),
     '5': ('F', 'Cirilla'),
     '6': ('F', 'Karolina Gorczyca'),
-    '7': ('M', 'Crach'),
-    '8': ('M', 'Olgierd'),
+    '7': ('M', 'Olgierd'),
+    '8': ('M', 'Baron'),
     '9': ('M', 'ChamberlainEmhyr'),
-    '10': ( 'M', 'Hjort'),
-    '11': ( 'M', 'Snaf'),
+    '10': ( 'M', 'Damien'),
+    '11': ( 'M', 'Guy'),
     '12': ( 'M', 'Letho'),
-    '13': ( 'M', 'Lambert'),
+    '13': ( 'M', 'Udalryk'),
     '14': ( 'M', 'Pazura'),
-    '15': ( 'M', 'Grim'),
-    '16': ( 'M', 'Dusty'),
-    '17': ( 'M', 'Roche'),
+    '15': ( 'M', 'Zoltan'),
+    '16': ( 'M', 'Nyras'),
+    '17': ( 'M', 'Grimes'),
     '18': ( 'M', 'Raven'),
-    '19': ( 'M', 'Voorhis'),
+    '19': ( 'M', 'EwaldBorsody'),
     '20': ( 'M', 'Vesemir'),
 }
 
@@ -100,7 +102,6 @@ def infer():
 
     model1 = load_models(*models_paths[0])
     model2 = load_models(*models_paths[1])
-    # model3 = load_models(*models_paths[2])
 
 
     text_list = lines_to_list(text_path)
@@ -115,21 +116,26 @@ def infer():
 
         speaker, text = text.split('|')
 
-        model, _speaker_id = speakers_map[speaker]
+        model, _speaker_id, *infer_args = speakers_map[speaker]
 
         if model == 'S':
             continue
-        radtts, vocoder, denoiser, trainset = model1 if model == 'M' else model3 if model == 'S' else model2
+        radtts, vocode_audio, trainset, data_config = model1 if model == 'M' else model2
 
         speaker_id = trainset.get_speaker_id(_speaker_id).cuda()
         speaker_id_text, speaker_id_attributes = speaker_id, speaker_id
         
+        if len(infer_args) > 0:
+            sigma = infer_args[0]
+        else:
+            sigma = 0.667
+
         #print(f"{i+1}/{len(text_list)}: {text}")
         text = trainset.get_text(text).cuda()[None]
         with amp.autocast(False):
             with torch.no_grad():
                 outputs = radtts.infer(
-                    speaker_id, text, 0.667, 0.667, 0.8,
+                    speaker_id, text, sigma, 0.667, 0.8,
                     0.8, 1.00, token_duration_max=100,
                     speaker_id_text=speaker_id_text,
                     speaker_id_attributes=speaker_id_attributes,
@@ -137,15 +143,9 @@ def infer():
                     energy_std=0)
 
                 mel = outputs['mel']
-                audio = vocoder(mel).float()[0]
-                audio_denoised = denoiser(
-                    audio, strength=0.0005)[0].float()
+                audio_denoised = vocode_audio(mel)
 
-                audio = audio[0].cpu().numpy()
-                audio_denoised = audio_denoised[0].cpu().numpy()
-                audio_denoised = audio_denoised / np.max(np.abs(audio_denoised))
-
-                write(output_path, 22050, audio_denoised)
+                write(output_path, data_config['sampling_rate'], audio_denoised)
 
 
 if __name__ == "__main__":

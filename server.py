@@ -5,15 +5,15 @@ import numpy as np
 import torch
 import os
 
+from tqdm import tqdm
 from torch.cuda import amp
 from scipy.io.wavfile import write
+from infer.helpers import load_models
 
 from radtts import RADTTS
 from data import Data
 
-from hifigan_models import Generator
-from hifigan_env import AttrDict
-from hifigan_denoiser import Denoiser
+from subtitle_parser import parse_subtitles_file
 
 #DEFAULTS, can be parameterized in future:
 sigma_tkndur = 0.667
@@ -24,64 +24,11 @@ f0_std = 0.0
 energy_mean = 0.0
 energy_std = 0.0
 denoising_strength = 0.006
-
-vocoder: Generator = None
-denoiser: Denoiser = None
-data_config, model_config = None, None
+    
+data_config = None
+vocode_audio = None
 model: RADTTS = None
 trainset: Data = None
-
-def load_vocoder(config_path, vocoder_path, to_cuda=True):
-    with open(config_path) as f:
-        data_vocoder = f.read()
-    config_vocoder = json.loads(data_vocoder)
-    h = AttrDict(config_vocoder)
-    if 'gaussian_blur' in config_vocoder:
-        config_vocoder['gaussian_blur']['p_blurring'] = 0.0
-    else:
-        config_vocoder['gaussian_blur'] = {'p_blurring': 0.0}
-        h['gaussian_blur'] = {'p_blurring': 0.0}
-
-    state_dict_g = torch.load(vocoder_path, map_location='cpu')['generator']
-
-    # load hifigan
-    global vocoder
-    vocoder = Generator(h)
-    vocoder.load_state_dict(state_dict_g)
-    global denoiser
-    denoiser = Denoiser(vocoder)
-    if to_cuda:
-        vocoder.cuda()
-        denoiser.cuda()
-    vocoder.eval()
-    denoiser.eval()
-
-def load_model(config_path: str, model_path: str):
-    with open(config_path) as f:
-        data = f.read()
-    config = json.loads(data)
-    
-    global data_config
-    data_config = config["data_config"]
-    global model_config
-    model_config = config["model_config"]
-
-    global model
-    model = RADTTS(**model_config).cuda()
-    model.enable_inverse_cache() # cache inverse matrix for 1x1 invertible convs
-
-    checkpoint_dict = torch.load(model_path, map_location='cpu')
-    state_dict = checkpoint_dict['state_dict']
-    model.load_state_dict(state_dict, strict=False)
-    model.eval()
-    print(f"Loaded checkpoint '{model_path}')")
-    
-    ignore_keys = ['training_files', 'validation_files']
-    
-    global trainset
-    trainset = Data(
-        data_config['training_files'],
-        **dict((k, v) for k, v in data_config.items() if k not in ignore_keys))
 
 async def initialize_model(websocket, message):
     model_config_path = message['$modelConfigPath']
@@ -92,8 +39,8 @@ async def initialize_model(websocket, message):
     info_message = json.dumps({'info': f'Initializing model from path: {model_path}...'})
     await websocket.send(info_message)
 
-    load_model(model_config_path, model_path)
-    load_vocoder(vocoder_config_path, vocoder_path)
+    global vocode_audio, model, trainset, data_config
+    model, vocode_audio, trainset, data_config = load_models(model_path, model_config_path, vocoder_path, vocoder_config_path)
 
     info_message = json.dumps({
             'info': f'Initialized model from path: {model_path}...',
@@ -144,17 +91,11 @@ async def synthesize_text(websocket, message):
                 f0_mean=f0_mean, f0_std=f0_std, energy_mean=energy_mean,
                 energy_std=energy_std)
 
-            mel = outputs['mel']
-            audio = vocoder(mel).float()[0]
-            audio_denoised = denoiser(audio, strength=denoising_strength)[0].float()
-
-            audio = audio[0].cpu().numpy()
-            audio_denoised = audio_denoised[0].cpu().numpy()
-            audio_denoised = audio_denoised / np.max(np.abs(audio_denoised))
+            audio_denoised = vocode_audio(outputs['mel'])
 
             file_name = f"{speaker}_{token_dur_scaling}_{sigma}_{sigma_tkndur}.wav"
             output_path = f"{output_dir}/{file_name}"
-            write(output_path, data_config['sampling_rate'], audio_denoised)
+            write(output_path, 22050, audio_denoised)
 
     info_message = json.dumps({
         'info': f'Synthesized file...',
@@ -205,13 +146,8 @@ async def synthesize_file(websocket, message):
                     f0_mean=f0_mean, f0_std=f0_std, energy_mean=energy_mean,
                     energy_std=energy_std)
 
-                mel = outputs['mel']
-                audio = vocoder(mel).float()[0]
-                audio_denoised = denoiser(audio, strength=denoising_strength)[0].float()
-
-                audio = audio[0].cpu().numpy()
-                audio_denoised = audio_denoised[0].cpu().numpy()
-                audio_denoised = audio_denoised / np.max(np.abs(audio_denoised))
+               
+                audio_denoised = vocode_audio(outputs['mel'])
                 if result is None:
                     result = audio_denoised
                 else:
@@ -257,57 +193,53 @@ async def synthesize_subs(websocket, message):
     sigma_energy = message['energy']
     sigma_f0 = message['f0']
     f0_mean = message['f0Mean']
-    frame_rate = message['frameRate']
 
     speaker_id = trainset.get_speaker_id(speaker).cuda()
     speaker_id_text = trainset.get_speaker_id(speaker_text).cuda()
     speaker_id_attributes = trainset.get_speaker_id(speaker_attributes).cuda()
     
     os.makedirs(output_dir, exist_ok=True)
-    texts = lines_to_list(file)
+    subtitles = parse_subtitles_file(file)
 
     result = None
     sampling_rate = data_config['sampling_rate']
     _token_dur_scaling = token_dur_scaling
 
-    for i, text in enumerate(texts):
-        from_frame, to_frame, text = text.split('|')
-        text = trainset.get_text(text).cuda()[None]
+    for i, subtitle in enumerate(tqdm(subtitles)):
+        text = trainset.get_text(subtitle[0]).cuda()[None]
 
         with amp.autocast(False):
             with torch.no_grad():
-                if result is None:
-                    segment_length = float(to_frame) / float(frame_rate)
+                if result is None or (type(result) == list and len(result) == 0):
+                    segment_length = subtitle[2]
                     result = []
                 else:
-                    segment_length = float(to_frame) / float(frame_rate) - (result.shape[0] / sampling_rate)
+                    segment_length = subtitle[2] - result.shape[0] / sampling_rate
+                try:
+                    audio_length = float('inf')
+                    while audio_length > segment_length:
+                        #if _token_dur_scaling != token_dur_scaling: print(f'with token duration scaling = {_token_dur_scaling}')
 
-                audio_length = float('inf')
-                while audio_length > segment_length:
-                    if _token_dur_scaling != token_dur_scaling: print(f'with token duration scaling = {_token_dur_scaling}')
+                        outputs = model.infer(
+                            speaker_id, text, sigma, sigma_tkndur, sigma_f0,
+                            sigma_energy, _token_dur_scaling, token_duration_max=100,
+                            speaker_id_text=speaker_id_text,
+                            speaker_id_attributes=speaker_id_attributes,
+                            f0_mean=f0_mean, f0_std=f0_std, energy_mean=energy_mean,
+                            energy_std=energy_std)
 
-                    outputs = model.infer(
-                        speaker_id, text, sigma, sigma_tkndur, sigma_f0,
-                        sigma_energy, _token_dur_scaling, token_duration_max=100,
-                        speaker_id_text=speaker_id_text,
-                        speaker_id_attributes=speaker_id_attributes,
-                        f0_mean=f0_mean, f0_std=f0_std, energy_mean=energy_mean,
-                        energy_std=energy_std)
+                       
+                        audio_denoised = vocode_audio(outputs['mel'])
 
-                    mel = outputs['mel']
-                    audio = vocoder(mel).float()[0]
-                    audio_denoised = denoiser(audio, strength=denoising_strength)[0].float()
+                        audio_length = audio_denoised.shape[0] / sampling_rate
+                        _token_dur_scaling = _token_dur_scaling - 0.04
 
-                    audio = audio[0].cpu().numpy()
-                    audio_denoised = audio_denoised[0].cpu().numpy()
-                    audio_denoised = audio_denoised / np.max(np.abs(audio_denoised))
-
-                    audio_length = audio_denoised.shape[0] / sampling_rate
-                    _token_dur_scaling = _token_dur_scaling - 0.015
-
-                audio_denoised = pad_audio(audio_denoised, sampling_rate, segment_length)
-                result = np.concatenate([result, audio_denoised])
-                _token_dur_scaling = token_dur_scaling
+                    audio_denoised = pad_audio(audio_denoised, sampling_rate, segment_length)
+                    result = np.concatenate([result, audio_denoised])
+                    _token_dur_scaling = token_dur_scaling
+                except Exception as e:
+                    print(e)
+                    continue
 
     file_name = f"{speaker}_subs.wav"
     output_path = f"{output_dir}/{file_name}"
@@ -352,13 +284,8 @@ async def synthesize_book(websocket, message):
                     f0_mean=f0_mean, f0_std=f0_std, energy_mean=energy_mean,
                     energy_std=energy_std)
 
-                mel = outputs['mel']
-                audio = vocoder(mel).float()[0]
-                audio_denoised = denoiser(audio, strength=denoising_strength)[0].float()
-
-                audio = audio[0].cpu().numpy()
-                audio_denoised = audio_denoised[0].cpu().numpy()
-                audio_denoised = audio_denoised / np.max(np.abs(audio_denoised))
+               
+                audio_denoised = vocode_audio(outputs['mel'])
                 if result is None:
                     result = audio_denoised
                 else:
@@ -366,7 +293,7 @@ async def synthesize_book(websocket, message):
 
     file_name = f"{speaker}_{token_dur_scaling}_{sigma}_{sigma_tkndur}.wav"
     output_path = f"{output_dir}/{file_name}"
-    write(output_path, data_config['sampling_rate'], result)
+    write(output_path, 22050, result)
     info_message = json.dumps({
         'info': f'Synthesized book...',
         'audioPath': output_path

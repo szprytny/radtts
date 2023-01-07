@@ -1,9 +1,12 @@
 import torch
 import json
+import numpy as np
 
 from hifigan_models import Generator
 from hifigan_env import AttrDict
 from hifigan_denoiser import Denoiser
+
+from infer.denoiser import Denoiser as WGDenoiser
 
 from radtts import RADTTS
 from data import Data
@@ -33,7 +36,7 @@ def get_configs(config_path, params):
     return model_config, data_config
 
 
-def load_vocoder(vocoder_path, config_path, to_cuda=True):
+def load_hifigan(vocoder_path, config_path, to_cuda=True):
     with open(config_path) as f:
         data_vocoder = f.read()
     config_vocoder = json.loads(data_vocoder)
@@ -61,8 +64,16 @@ def load_vocoder(vocoder_path, config_path, to_cuda=True):
 
     return vocoder, denoiser
 
+def load_waveglow(vocoder_path):
+    vocoder = torch.load(vocoder_path)['model']
+    vocoder.cuda().eval()
+    for k in vocoder.convinv:
+        k.float()
+    denoiser = WGDenoiser(vocoder) 
 
-def load_models(radtts_path, config_path, vocoder_path, vocoder_config_path):
+    return vocoder, denoiser
+
+def load_models(radtts_path, config_path, vocoder_path, vocoder_config_path, vocoder_type = 'hifigan'):
     checkpoint_dict = torch.load(radtts_path, map_location='cpu')
     speaker_ids = checkpoint_dict['speaker_ids'] if 'speaker_ids' in checkpoint_dict else None
     
@@ -79,11 +90,31 @@ def load_models(radtts_path, config_path, vocoder_path, vocoder_config_path):
     
     print(f"Loaded checkpoint '{radtts_path}')")
 
-    vocoder, denoiser = load_vocoder(vocoder_path, vocoder_config_path)
+    vocoder, denoiser = load_hifigan(vocoder_path, vocoder_config_path) if vocoder_type == 'hifigan' else load_waveglow(vocoder_path)
     trainset = Data(
         data_config['training_files'],
         **dict((k, v) for k, v in data_config.items() if k not in ignore_keys),
         speaker_ids=speaker_ids,
         load_data=False)
+
+    if vocoder_type == 'hifigan':
+        def vocode_audio(mel):
+            audio = vocoder(mel).float()[0]
+            audio_denoised = denoiser(
+                audio, strength=0.006)[0].float()
+
+            audio = audio[0].cpu().numpy()
+            audio_denoised = audio_denoised[0].cpu().numpy()
+            audio_denoised = audio_denoised / np.max(np.abs(audio_denoised))
+            return audio_denoised
+    else:
+        def vocode_audio(mel):
+            audio = vocoder.infer(mel, 0.8)
+            audio_denoised = denoiser(audio, strength=0.006)
+            audio_denoised = audio_denoised * data_config['max_wav_value']
+            audio_denoised = audio_denoised.squeeze()
+            audio_denoised = audio_denoised.cpu().numpy()
+            audio_denoised = audio_denoised.astype('int16')
+            return audio_denoised
     
-    return radtts, vocoder, denoiser, trainset
+    return radtts, vocode_audio, trainset, data_config
