@@ -3,6 +3,7 @@ import json
 from torch.utils.data import DataLoader
 from data import Data, DataCollate
 from common import update_params
+from tqdm import tqdm
 
 def prepare_dataloaders(data_config):
     # Get data, data loaders and collate function ready
@@ -43,10 +44,10 @@ def process():
     train_loader, val_loader = prepare_dataloaders(
         data_config)
 
-    for _ in train_loader:
+    for _ in tqdm(train_loader):
         continue
 
-    for _ in val_loader:
+    for _ in tqdm(val_loader):
         continue
 
             

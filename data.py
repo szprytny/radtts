@@ -130,7 +130,7 @@ class Data(torch.utils.data.Dataset):
         dataset = []
         for dset_name, dset_dict in datasets.items():
             folder_path = dset_dict['basedir']
-            audiodir = dset_dict['audiodir']
+            audiodir = dset_dict['audiodir'] if 'audiodir' in dset_dict else ''
             filename = dset_dict['filelist']
 
             wav_folder_prefix = os.path.join(folder_path, audiodir)

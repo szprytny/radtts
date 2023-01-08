@@ -19,7 +19,7 @@
     "vocoder_checkpoint_path": "c:/shmart/hifigan/cp_hifigan_p128/g_latest",
     "log_attribute_samples": true,
     "log_decoder_samples": false,
-    "n_speakers_log": 5,
+    "n_speakers_log": 4,
     "warmstart_checkpoint_path": "",
     "use_amp": true,
     "grad_clip_val": 1.0,
@@ -32,8 +32,8 @@
       "energy_loss_weight": 1.0,
       "vpred_loss_weight": 1.0
     },
-    "binarization_start_epoch": 10,
-    "kl_loss_start_epoch": 15,
+    "binarization_start_epoch": 5,
+    "kl_loss_start_epoch": 10,
     "unfreeze_modules": "all"
   },
 
@@ -42,24 +42,20 @@
     "training_files": {
       "MAN": {
         "basedir": "D:/audio-datasety/MAN/",
-        "audiodir": "D:/audio-datasety/MAN/",
         "filelist": "train.txt"
       },
       "WOMAN": {
         "basedir": "D:/audio-datasety/WOMAN/",
-        "audiodir": "D:/audio-datasety/WOMAN/",
         "filelist": "train.txt"
       }
     },
     "validation_files": {
       "MAN": {
         "basedir": "D:/audio-datasety/MAN/",
-        "audiodir": "D:/audio-datasety/MAN/",
         "filelist": "test.txt"
       },
       "WOMAN": {
         "basedir": "D:/audio-datasety/WOMAN/",
-        "audiodir": "D:/audio-datasety/WOMAN/",
         "filelist": "test.txt"
       }
     },
@@ -116,7 +112,7 @@
     "n_early_every": 2,
     "n_group_size": 2,
     "affine_model": "wavenet",
-    "include_modules": "decatndpm",
+    "include_modules": "decatn",
     "scaling_fn": "tanh",
     "matrix_decomposition": "LUS",
     "learn_alignments": true,

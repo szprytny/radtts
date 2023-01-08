@@ -265,6 +265,7 @@ rules_def: List[Tuple[str, str]] = [
     ("abigail", 'abigejl'),
     ('beatles', 'bitels'),
     ('w ogóle', 'wogóle'),
+    ('starkhaven', 'starkhejwen'),
 
     # (' ', ''),
     ('m.in.', 'między innymi '),
