@@ -375,14 +375,16 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
     prepare_model_weights(model, unfreeze_modules)
     model.train()
 
-    epoch_offset = max(0, int(iteration / len(train_loader)))
-    batch_offset = max(0, iteration % len(train_loader))
+    total_batches = len(train_loader)
+    epoch_offset = max(0, int(iteration / total_batches))
+    batch_offset = max(0, iteration % total_batches)
     # ================ MAIN TRAINNIG LOOP! ===================
     for epoch in range(epoch_offset, epochs):
         print("Epoch: {}".format(epoch))
         for batch_no, batch in enumerate(train_loader):
-            if batch_no < batch_offset : continue
-            else: batch_offset = 0
+            if batch_offset > 0 and total_batches - batch_offset - batch_no == 0:
+                batch_offset = 0
+                break
 
             tic = timer()
             model.zero_grad()

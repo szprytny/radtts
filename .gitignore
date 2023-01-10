@@ -3,5 +3,6 @@ data_cache
 filelists/
 *.pdf
 *.pt
-results
+results/
 sentences/
+tools/
