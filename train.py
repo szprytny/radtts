@@ -36,7 +36,7 @@ from distributed import (init_distributed, apply_gradient_allreduce,
                          reduce_tensor)
 from torch.utils.data.distributed import DistributedSampler
 from infer.helpers import load_hifigan
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 
 def freeze(model):
