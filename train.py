@@ -23,7 +23,6 @@ import json
 import os
 import hashlib
 import torch
-from timeit import default_timer as timer
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch.cuda import amp
@@ -37,6 +36,7 @@ from distributed import (init_distributed, apply_gradient_allreduce,
                          reduce_tensor)
 from torch.utils.data.distributed import DistributedSampler
 from infer.helpers import load_hifigan
+from tqdm import tqdm
 
 
 def freeze(model):
@@ -188,7 +188,7 @@ def load_checkpoint(checkpoint_path, model, ignore_layers=[]):
 
 
 def save_checkpoint(model, optimizer, learning_rate, iteration, filepath, speaker_ids):
-    print("Saving model and optimizer state at iteration {} to {}".format(
+    print("\nSaving model and optimizer state at iteration {} to {}".format(
           iteration, filepath))
 
     torch.save({'state_dict': model.state_dict(),
@@ -213,7 +213,7 @@ def compute_validation_loss(iteration, model, criterion, valset, collate_fn,
 
         loss_outputs_full = {}
         n_batches = len(val_loader)
-        for i, batch in enumerate(val_loader):
+        for i, batch in enumerate(tqdm(val_loader)):
             (mel, speaker_ids, text, in_lens, out_lens, attn_prior,
              f0, voiced_mask, p_voiced, energy_avg,
              audiopaths) = parse_data_from_batch(batch)
@@ -381,12 +381,11 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
     # ================ MAIN TRAINNIG LOOP! ===================
     for epoch in range(epoch_offset, epochs):
         print("Epoch: {}".format(epoch))
-        for batch_no, batch in enumerate(train_loader):
+        for batch_no, batch in enumerate(pbar := tqdm(train_loader)):
             if batch_offset > 0 and total_batches - batch_offset - batch_no == 0:
                 batch_offset = 0
                 break
 
-            tic = timer()
             model.zero_grad()
             (mel, speaker_ids, text, in_lens, out_lens, attn_prior,
              f0, voiced_mask, p_voiced, energy_avg,
@@ -427,19 +426,18 @@ def train(n_gpus, rank, output_directory, epochs, optim_algo, learning_rate,
             scaler.step(optimizer)
             scaler.update()
 
-            toc = timer()
             current_lr = optimizer.param_groups[0]['lr']
-            print_list = [f"iter: {iteration}  ({toc-tic:.2f} s)  |  lr: {current_lr:.8g}"]
+            print_list = {'lr': f"{current_lr:.8g}"}
 
             for k, (v, w) in loss_outputs.items():
                 reduced_v = reduce_tensor(v, n_gpus, 0).item()
                 loss_outputs[k] = reduced_v
                 if rank == 0:
-                    print_list.append('  |  {}: {:.3f}'.format(k, v))
+                    print_list[k] = f'{v:.3f}'
                     logger.add_scalar('train/'+k, reduced_v, iteration)
 
             if rank == 0:
-                print(''.join(print_list), flush=True)
+                pbar.set_postfix(print_list)
 
             if iteration % iters_per_checkpoint != 0 and iteration % 200 == 0:
                 checkpoint_path = "{}/latest_model.pt".format(
