@@ -213,7 +213,7 @@ def compute_validation_loss(iteration, model, criterion, valset, collate_fn,
 
         loss_outputs_full = {}
         n_batches = len(val_loader)
-        for i, batch in enumerate(tqdm(val_loader, desc="Validation: ")):
+        for i, batch in enumerate(tqdm(val_loader, desc="Validation: ", position=0)):
             (mel, speaker_ids, text, in_lens, out_lens, attn_prior,
              f0, voiced_mask, p_voiced, energy_avg,
              audiopaths) = parse_data_from_batch(batch)
